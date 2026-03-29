@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>ASCII Art Converter</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#111; color:#eee; font-family:system-ui,sans-serif; min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:20px; }
+h1 { font-size:24px; margin-bottom:15px; color:#0ff; }
+.controls { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:15px; }
+.controls label { font-size:13px; color:#aaa; }
+.controls input, .controls select { background:#222; border:1px solid #444; color:#eee; padding:4px 8px; border-radius:4px; font-size:13px; }
+.controls input[type=range] { width:120px; }
+.controls button { background:#0ff; color:#000; border:none; padding:6px 16px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:13px; }
+.controls button:hover { background:#4ff; }
+.controls button.secondary { background:#333; color:#eee; }
+.controls button.secondary:hover { background:#555; }
+#drop-zone { width:100%; max-width:900px; min-height:120px; border:2px dashed #444; border-radius:8px; display:flex; align-items:center; justify-content:center; margin-bottom:15px; cursor:pointer; transition:border-color 0.2s; position:relative; }
+#drop-zone:hover, #drop-zone.dragover { border-color:#0ff; }
+#drop-zone p { color:#666; font-size:14px; pointer-events:none; }
+#drop-zone img { max-height:200px; max-width:100%; object-fit:contain; }
+#file-input { display:none; }
+.output-wrap { width:100%; max-width:900px; position:relative; }
+#output { background:#0a0a0a; border:1px solid #333; border-radius:4px; padding:8px; overflow:auto; max-height:70vh; white-space:pre; font-family:'Courier New',monospace; font-size:6px; line-height:1.1; color:#ddd; user-select:all; }
+.info { color:#666; font-size:12px; margin-top:8px; }
+#preview-canvas { display:none; }
+.color-mode #output span { white-space:pre; }
+</style>
+</head>
+<body>
+<h1>Image → ASCII Art</h1>
+
+<div class="controls">
+  <label>宽度: <input type="range" id="width" min="40" max="300" value="120"> <span id="width-val">120</span>字符</label>
+  <label>字符集:
+    <select id="charset">
+      <option value="standard">标准</option>
+      <option value="blocks">方块</option>
+      <option value="dense">密集</option>
+      <option value="simple">简单</option>
+      <option value="custom">自定义</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="invert"> 反色</label>
+  <label><input type="checkbox" id="color-mode"> 彩色</label>
+  <label>字号: <input type="range" id="font-size" min="3" max="14" value="6"> <span id="fs-val">6</span>px</label>
+  <button onclick="convert()">转换</button>
+  <button class="secondary" onclick="copyResult()">复制文本</button>
+  <button class="secondary" onclick="downloadTxt()">下载 .txt</button>
+  <button class="secondary" onclick="downloadPng()">下载 .png</button>
+</div>
+
+<div id="drop-zone" onclick="document.getElementById('file-input').click()">
+  <p>拖拽图片到这里 或 点击上传</p>
+  <input type="file" id="file-input" accept="image/*">
+</div>
+
+<div class="output-wrap">
+  <div id="output">上传图片后点击"转换"</div>
+  <div class="info" id="info"></div>
+</div>
+
+<canvas id="preview-canvas"></canvas>
+
+<script>
+const CHARSETS = {
+  standard: ' .\'`^",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$',
+  blocks:   ' ░▒▓█',
+  dense:    ' .:;+*#%@',
+  simple:   ' .:-=+*#%@',
+};
+
+let loadedImage = null;
+
+// --- Drop zone ---
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) loadImage(file);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) loadImage(e.target.files[0]);
+});
+
+function loadImage(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      loadedImage = img;
+      dropZone.innerHTML = '';
+      dropZone.appendChild(img);
+      convert();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// --- Controls ---
+document.getElementById('width').addEventListener('input', e => {
+  document.getElementById('width-val').textContent = e.target.value;
+});
+document.getElementById('font-size').addEventListener('input', e => {
+  document.getElementById('fs-val').textContent = e.target.value;
+  document.getElementById('output').style.fontSize = e.target.value + 'px';
+});
+
+// --- Convert ---
+function convert() {
+  if (!loadedImage) return;
+
+  const img = loadedImage;
+  const targetW = parseInt(document.getElementById('width').value);
+  const charRatio = 0.55; // characters are taller than wide
+  const targetH = Math.round(targetW * (img.height / img.width) * charRatio);
+
+  const canvas = document.getElementById('preview-canvas');
+  canvas.width = targetW; canvas.height = targetH;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, targetW, targetH);
+  const data = ctx.getImageData(0, 0, targetW, targetH).data;
+
+  let charsetName = document.getElementById('charset').value;
+  let chars;
+  if (charsetName === 'custom') {
+    chars = prompt('输入自定义字符集（从暗到亮）:', ' .:-=+*#%@') || ' .:-=+*#%@';
+  } else {
+    chars = CHARSETS[charsetName];
+  }
+
+  const invert = document.getElementById('invert').checked;
+  const colorMode = document.getElementById('color-mode').checked;
+
+  const output = document.getElementById('output');
+  output.innerHTML = '';
+
+  if (colorMode) {
+    document.body.classList.add('color-mode');
+  } else {
+    document.body.classList.remove('color-mode');
+  }
+
+  let text = '';
+  let html = '';
+
+  for (let y = 0; y < targetH; y++) {
+    let line = '';
+    let lineHtml = '';
+    for (let x = 0; x < targetW; x++) {
+      const i = (y * targetW + x) * 4;
+      const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
+
+      let brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      if (a < 128) brightness = invert ? 0 : 1; // transparent = background
+      if (invert) brightness = 1 - brightness;
+
+      const charIdx = Math.floor(brightness * (chars.length - 1));
+      const ch = chars[charIdx] || ' ';
+      line += ch;
+
+      if (colorMode && a >= 128) {
+        lineHtml += `<span style="color:rgb(${r},${g},${b})">${ch === ' ' ? '&nbsp;' : escHtml(ch)}</span>`;
+      } else {
+        lineHtml += ch === ' ' ? '&nbsp;' : escHtml(ch);
+      }
+    }
+    text += line + '\n';
+    html += lineHtml + '\n';
+  }
+
+  if (colorMode) {
+    output.innerHTML = html;
+  } else {
+    output.textContent = text;
+  }
+
+  document.getElementById('info').textContent = `${targetW} × ${targetH} 字符 | 原图 ${img.width}×${img.height}px | 字符集: ${chars.length}级`;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// --- Export ---
+function copyResult() {
+  const output = document.getElementById('output');
+  const text = output.textContent || output.innerText;
+  navigator.clipboard.writeText(text).then(() => alert('已复制到剪贴板'));
+}
+
+function downloadTxt() {
+  const output = document.getElementById('output');
+  const text = output.textContent || output.innerText;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'ascii-art.txt'; a.click();
+}
+
+function downloadPng() {
+  const output = document.getElementById('output');
+  const fontSize = parseInt(document.getElementById('font-size').value);
+  const lines = (output.textContent || output.innerText).split('\n').filter(l => l.length > 0);
+  if (lines.length === 0) return;
+
+  const measureCanvas = document.createElement('canvas');
+  const mctx = measureCanvas.getContext('2d');
+  mctx.font = `${fontSize}px "Courier New",monospace`;
+  const charW = mctx.measureText('M').width;
+  const lineH = fontSize * 1.15;
+  const maxCols = Math.max(...lines.map(l => l.length));
+
+  const w = Math.ceil(maxCols * charW) + 10;
+  const h = Math.ceil(lines.length * lineH) + 10;
+
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = w; exportCanvas.height = h;
+  const ctx = exportCanvas.getContext('2d');
+
+  // Transparent background
+  ctx.clearRect(0, 0, w, h);
+  ctx.font = `${fontSize}px "Courier New",monospace`;
+  ctx.fillStyle = '#ddd';
+  ctx.textBaseline = 'top';
+
+  for (let i = 0; i < lines.length; i++) {
+    ctx.fillText(lines[i], 5, 5 + i * lineH);
+  }
+
+  const a = document.createElement('a');
+  a.href = exportCanvas.toDataURL('image/png');
+  a.download = 'ascii-art.png'; a.click();
+}
+</script>
+</body>
+</html>
