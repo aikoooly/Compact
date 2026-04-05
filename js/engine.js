@@ -101,20 +101,22 @@ const Input = {
     window.addEventListener('keyup', (e) => {
       this.keys[e.code] = false;
     });
-    canvas.addEventListener('mousemove', (e) => {
+    // Mouse events on window so they work even when cursor leaves canvas
+    window.addEventListener('mousemove', (e) => {
       const rect = canvas.getBoundingClientRect();
       this.mouse.x = (e.clientX - rect.left) * (canvas.width / rect.width);
       this.mouse.y = (e.clientY - rect.top) * (canvas.height / rect.height);
     });
-    canvas.addEventListener('mousedown', (e) => {
+    window.addEventListener('mousedown', (e) => {
       if (e.button === 0) { this.mouse.down = true; this._clickedThisFrame = true; }
       if (e.button === 2) { this.mouse.rightDown = true; this._rightClickedThisFrame = true; }
     });
-    canvas.addEventListener('mouseup', (e) => {
+    window.addEventListener('mouseup', (e) => {
       if (e.button === 0) this.mouse.down = false;
       if (e.button === 2) this.mouse.rightDown = false;
     });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    window.addEventListener('contextmenu', (e) => e.preventDefault());
     canvas.addEventListener('wheel', (e) => {
       this.wheelDelta += Math.sign(e.deltaY);
       e.preventDefault();

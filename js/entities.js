@@ -1847,15 +1847,15 @@ class Enemy {
 const EnemyTypes = {
   // Level 1: Perfectness — Social media icons
   LIKE: {
-    hp: 50, speed: 140, radius: 14, color: '#a050e0', damage: 10, attackCooldown: 1.5,
+    hp: 25, speed: 140, radius: 14, color: '#a050e0', damage: 10, attackCooldown: 1.5,
     behavior: 'social', icon: '❤', iconColor: '#a050e0', score: 10,
   },
   RETWEET: {
-    hp: 60, speed: 120, radius: 14, color: '#2a2', damage: 12, attackCooldown: 1.8,
+    hp: 30, speed: 120, radius: 14, color: '#2a2', damage: 12, attackCooldown: 1.8,
     behavior: 'social', icon: '🔄', iconColor: '#2a2', score: 12,
   },
   COMMENT: {
-    hp: 70, speed: 110, radius: 15, color: '#48f', damage: 14, attackCooldown: 2.0,
+    hp: 35, speed: 110, radius: 15, color: '#48f', damage: 14, attackCooldown: 2.0,
     behavior: 'social', icon: '💬', iconColor: '#48f', score: 12,
   },
   // Level 1: (hidden, kept for reference)
