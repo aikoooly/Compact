@@ -292,9 +292,9 @@ const Levels = [
       { title: 'Level 1: Perfectness', text: 'Tokyo rush hour. The shoes are coming.\nHold LEFT CLICK to charge your punch. Tap for quick hits.\nRIGHT CLICK to dash toward cursor.\n\nWASD to move.' },
     ],
     waves: [
-      { spawns: [{ type: EnemyTypes.HIGH_HEEL, count: 4, delay: 0.5 }] },
-      { spawns: [{ type: EnemyTypes.LEATHER_SHOE, count: 3, delay: 0.5 }, { type: EnemyTypes.HIGH_HEEL, count: 3, delay: 0.4 }] },
-      { spawns: [{ type: EnemyTypes.LEATHER_SHOE, count: 4, delay: 0.3 }, { type: EnemyTypes.HIGH_HEEL, count: 4, delay: 0.3 }] },
+      { spawns: [{ type: EnemyTypes.LIKE, count: 3, delay: 0.5 }, { type: EnemyTypes.COMMENT, count: 2, delay: 0.5 }] },
+      { spawns: [{ type: EnemyTypes.LIKE, count: 3, delay: 0.4 }, { type: EnemyTypes.RETWEET, count: 3, delay: 0.4 }, { type: EnemyTypes.COMMENT, count: 2, delay: 0.4 }] },
+      { spawns: [{ type: EnemyTypes.LIKE, count: 4, delay: 0.3 }, { type: EnemyTypes.RETWEET, count: 3, delay: 0.3 }, { type: EnemyTypes.COMMENT, count: 3, delay: 0.3 }] },
       { spawns: [{ type: EnemyTypes.BOSS_MIRROR, count: 1, delay: 0 }] },
     ],
     memoryCards: ['"you have to be over prepared"', '"pressure is privilege"', '"be perfect or be nothing"'],

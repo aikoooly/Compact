@@ -40,14 +40,14 @@ class Projectile {
       ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(angle);
       ctx.fillStyle = '#ddd';
       ctx.beginPath();
-      ctx.moveTo(8, 0);    // tip
-      ctx.lineTo(0, -3);   // top edge
-      ctx.lineTo(-6, 0);   // tail
-      ctx.lineTo(0, 3);    // bottom edge
+      ctx.moveTo(16, 0);    // tip
+      ctx.lineTo(0, -6);    // top edge
+      ctx.lineTo(-12, 0);   // tail
+      ctx.lineTo(0, 6);     // bottom edge
       ctx.closePath();
       ctx.fill();
       // Thin dark edge
-      ctx.strokeStyle = '#999'; ctx.lineWidth = 0.5; ctx.stroke();
+      ctx.strokeStyle = '#999'; ctx.lineWidth = 1; ctx.stroke();
       ctx.restore();
     } else {
       // Normal projectile with glow
@@ -256,15 +256,20 @@ class SniperRifle {
     this.name = '狙击枪'; this.color = '#f44';
     this.ammo = 8; this.maxAmmo = 8;
     this.reloading = false; this.reloadTimer = 0; this.reloadTime = 1.5;
-    this.fireCooldown = 0; this.baseDamage = 200;
-    this._laserFlashTimer = 0; // bright laser flash on fire
+    this.baseDamage = 200;
+    this._laserFlashTimer = 0;
     this._laserFlashAngle = 0;
     this._laserFlashX = 0; this._laserFlashY = 0;
+    // Hold-to-fire system
+    this.holdTime = 0;       // how long mouse held
+    this.chargeThreshold = 1.0; // must hold 1s to fire
+    this.charged = false;    // becomes true at 1s
+    this.holdAngle = 0;      // locked angle when charged
   }
   update(dt, player, enemies, meleeHits, projectiles) {
-    if (this.fireCooldown > 0) this.fireCooldown -= dt;
     if (this._laserFlashTimer > 0) this._laserFlashTimer -= dt;
     player.speed = player.baseSpeed;
+
     // Reload
     if (this.reloading) {
       this.reloadTimer -= dt;
@@ -274,64 +279,125 @@ class SniperRifle {
       this.reloading = true; this.reloadTimer = this.reloadTime; Audio.menuSelect();
     }
     if (this.ammo <= 0 && !this.reloading) { this.reloading = true; this.reloadTimer = this.reloadTime; }
-    // Fire — left click
-    if (Input.mouse.clicked && this.ammo > 0 && this.fireCooldown <= 0 && !this.reloading) {
-      this.ammo--;
-      this.fireCooldown = 0.5;
-      const dmg = this.baseDamage * (1 + player.compactLevel * 0.1);
-      projectiles.push(new Projectile(
-        player.x + Math.cos(player.angle) * 20, player.y + Math.sin(player.angle) * 20,
-        player.angle, 1500, dmg,
-        { color: '#f44', radius: 5, pierce: true, life: 1.0, trail: true }
-      ));
-      Audio.sniper(); Effects.shake(6, 0.15);
-      Particles.emit(player.x + Math.cos(player.angle) * 25, player.y + Math.sin(player.angle) * 25,
-        8, '#f44', { speed: 300, life: 0.15, angle: player.angle, spread: 0.4 });
-      // Recoil
-      player.x -= Math.cos(player.angle) * 8;
-      player.y -= Math.sin(player.angle) * 8;
-      // Laser flash
-      this._laserFlashTimer = 0.15;
-      this._laserFlashAngle = player.angle;
-      this._laserFlashX = player.x; this._laserFlashY = player.y;
+
+    // Hold-to-fire: mouse down accumulates holdTime
+    if (Input.mouse.down && this.ammo > 0 && !this.reloading) {
+      this.holdTime += dt;
+      // When reaching threshold → lock laser on, play sound cue
+      if (!this.charged && this.holdTime >= this.chargeThreshold) {
+        this.charged = true;
+        this.holdAngle = player.angle;
+        Audio._playTone(800, 0.1, 'sine', 0.15); // subtle "locked" beep
+      }
+      // While charged, keep updating aim
+      if (this.charged) {
+        this.holdAngle = player.angle;
+        // Slow player movement while aiming
+        player.speed = player.baseSpeed * 0.35;
+      }
+    } else if (!Input.mouse.down && this.holdTime > 0) {
+      // Mouse released
+      if (this.charged && this.ammo > 0) {
+        // FIRE! — horizontal direction matching laser
+        this.ammo--;
+        const dmg = this.baseDamage * (1 + player.compactLevel * 0.1);
+        const dir = (Input.mouse.worldX >= player.x) ? 1 : -1;
+        const fireAngle = dir > 0 ? 0 : Math.PI; // perfectly horizontal
+        projectiles.push(new Projectile(
+          player.x + dir * 20, player.y - 20,
+          fireAngle, 1500, dmg,
+          { color: '#a050e0', radius: 5, pierce: true, life: 1.5, trail: true }
+        ));
+        Audio.sniper(); Effects.shake(6, 0.15);
+        Particles.emit(player.x + dir * 25, player.y - 20,
+          8, '#a050e0', { speed: 300, life: 0.15, angle: fireAngle, spread: 0.4 });
+        // Recoil
+        player.x -= dir * 8;
+        // Laser flash
+        this._laserFlashTimer = 0.15;
+        this._laserFlashAngle = fireAngle;
+        this._laserFlashX = player.x; this._laserFlashY = player.y;
+      }
+      // Reset hold state
+      this.holdTime = 0;
+      this.charged = false;
     }
   }
   draw(ctx, player) {
-    // Thin red laser sight (always visible, subtle) — offset up 10px for hand alignment
-    const laserOffY = -10;
-    ctx.strokeStyle = 'rgba(255,50,50,0.35)'; ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    ctx.moveTo(player.x + Math.cos(player.angle) * 20, player.y + Math.sin(player.angle) * 20 + laserOffY);
-    ctx.lineTo(player.x + Math.cos(player.angle) * 600, player.y + Math.sin(player.angle) * 600 + laserOffY);
-    ctx.stroke(); ctx.setLineDash([]);
+    const laserOffY = -20;
+
+    // Purple laser beam — appears immediately on hold, horizontal (parallel to X axis)
+    // Direction: right if mouse is right of player, left otherwise
+    if (this.holdTime > 0 || this.charged) {
+      const dir = (Input.mouse.worldX >= player.x) ? 1 : -1;
+      const sx = player.x + dir * 20;
+      const sy = player.y + laserOffY;
+      const laserLen = 1200; // long beam
+      const ex = player.x + dir * laserLen;
+      const ey = sy; // perfectly horizontal
+
+      const chargePct = clamp(this.holdTime / this.chargeThreshold, 0, 1);
+      const pulse = 0.4 + Math.sin(Date.now() / 60) * 0.2;
+      const alpha = (0.3 + chargePct * 0.6) * pulse;
+      const width = 1 + chargePct * 2;
+
+      // Main beam — purple
+      ctx.strokeStyle = `rgba(140,60,220,${alpha})`; ctx.lineWidth = width;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+      // Glow
+      ctx.strokeStyle = `rgba(140,60,220,${alpha * 0.3})`; ctx.lineWidth = width * 4;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+
+      // When fully charged — brighter, pulsing dot at end
+      if (this.charged) {
+        ctx.strokeStyle = `rgba(180,80,255,${pulse})`; ctx.lineWidth = width + 1;
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+        ctx.fillStyle = `rgba(180,80,255,${pulse})`;
+        ctx.beginPath(); ctx.arc(ex, ey, 5, 0, Math.PI * 2); ctx.fill();
+      }
+
+      // Charge progress ring
+      if (!this.charged) {
+        ctx.strokeStyle = `rgba(140,60,220,${0.3 + chargePct * 0.5})`; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, 24, -Math.PI / 2, -Math.PI / 2 + chargePct * Math.PI * 2);
+        ctx.stroke();
+      }
+    }
 
     // LASER FLASH on fire — bright wide beam that fades quickly
     if (this._laserFlashTimer > 0) {
-      const t = this._laserFlashTimer / 0.15; // 1→0
-      const a = this._laserFlashAngle;
-      const sx = this._laserFlashX + Math.cos(a) * 15;
-      const sy = this._laserFlashY + Math.sin(a) * 15 - 10;
-      const ex = this._laserFlashX + Math.cos(a) * 800;
-      const ey = this._laserFlashY + Math.sin(a) * 800 - 10;
-      // Bright core
+      const t = this._laserFlashTimer / 0.15;
+      const dir = (this._laserFlashAngle > -Math.PI / 2 && this._laserFlashAngle < Math.PI / 2) ? 1 : -1;
+      const sx = this._laserFlashX + dir * 15;
+      const sy = this._laserFlashY - 10;
+      const ex = this._laserFlashX + dir * 1200;
+      const ey = sy;
+      // Bright purple flash
       ctx.strokeStyle = `rgba(255,255,255,${t * 0.9})`; ctx.lineWidth = 3 * t;
       ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
-      // Red glow
-      ctx.strokeStyle = `rgba(255,60,60,${t * 0.7})`; ctx.lineWidth = 8 * t;
+      ctx.strokeStyle = `rgba(160,80,255,${t * 0.7})`; ctx.lineWidth = 8 * t;
       ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
-      // Outer glow
-      ctx.strokeStyle = `rgba(255,0,0,${t * 0.3})`; ctx.lineWidth = 18 * t;
+      ctx.strokeStyle = `rgba(140,60,220,${t * 0.3})`; ctx.lineWidth = 18 * t;
       ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
-      // Muzzle flash
-      ctx.fillStyle = `rgba(255,200,150,${t})`; ctx.beginPath();
+      ctx.fillStyle = `rgba(200,150,255,${t})`; ctx.beginPath();
       ctx.arc(sx, sy, 10 * t, 0, Math.PI * 2); ctx.fill();
     }
   }
   drawHUD(ctx, w, h, player) {
     const F = Theme.fontUI;
     ctx.fillStyle = Theme.primary; ctx.font = `16px ${F}`; ctx.textAlign = 'left';
-    ctx.fillText('CLICK=fire  R=reload  RCLICK=dash', 20, h - 50);
+    const holdHint = this.charged ? '>>> RELEASE TO FIRE <<<' : 'HOLD 1s=aim  RELEASE=fire  R=reload';
+    ctx.fillText(holdHint, 20, h - 50);
+    // Charge bar
+    if (this.holdTime > 0 && !this.charged) {
+      const pct = clamp(this.holdTime / this.chargeThreshold, 0, 1);
+      ctx.fillStyle = '#f44'; ctx.font = `bold 18px ${F}`;
+      ctx.fillText(`charging ${(pct * 100).toFixed(0)}%`, 20, h - 72);
+    } else if (this.charged) {
+      ctx.fillStyle = '#f44'; ctx.font = `bold 18px ${F}`;
+      ctx.fillText('▶ LOCKED — release to fire', 20, h - 72);
+    }
     const ammoStr = '|'.repeat(this.ammo) + '.'.repeat(this.maxAmmo - this.ammo);
     ctx.fillStyle = '#f44'; ctx.font = `bold 22px ${F}`;
     ctx.fillText(`AMMO [${ammoStr}] ${this.ammo}/${this.maxAmmo}`, 20, h - 75);
@@ -410,27 +476,29 @@ class ChainGun {
     }
   }
   draw(ctx, player) {
-    // Gun shape — offset up 10px to align with hand
-    const gunOffY = -10;
-    ctx.save(); ctx.translate(player.x, player.y + gunOffY); ctx.rotate(player.angle);
-    ctx.fillStyle = '#888'; ctx.fillRect(5, -3, 22, 6);
-    ctx.fillStyle = '#666'; ctx.fillRect(0, -4, 8, 8);
-    ctx.restore();
-    // Chain visual — also offset up
+    const gunOffY = -20;
+    // No pointer line — aim circle handles direction
+    // Chain visual — simple thin line when active
     if (this.chainState === 'flying' || this.chainState === 'locked') {
-      ctx.strokeStyle = '#a0f'; ctx.lineWidth = 2; ctx.setLineDash([5, 3]);
+      ctx.strokeStyle = 'rgba(140,60,220,0.5)'; ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
       ctx.beginPath(); ctx.moveTo(player.x, player.y + gunOffY); ctx.lineTo(this.chainX, this.chainY); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = '#fff'; ctx.beginPath();
-      ctx.arc(this.chainX, this.chainY, 6, 0, Math.PI * 2); ctx.fill();
-      if (this.chainState === 'locked' && this.chainTarget) {
-        ctx.strokeStyle = '#a0f'; ctx.lineWidth = 2;
-        const r = this.chainTarget.radius + 8;
-        ctx.beginPath(); ctx.arc(this.chainTarget.x, this.chainTarget.y, r, 0, Math.PI * 2); ctx.stroke();
-        ctx.strokeStyle = '#a0f'; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(this.chainTarget.x, this.chainTarget.y, r + 4, 0, Math.PI * 2); ctx.stroke();
-      }
+      // Small dot at hook tip
+      ctx.fillStyle = '#a060e0'; ctx.beginPath();
+      ctx.arc(this.chainX, this.chainY, 4, 0, Math.PI * 2); ctx.fill();
     }
+    // Aim indicator — large circle + dot at hand level
+    const aimOffY = -20;
+    const aimDist = 30;
+    const ax = player.x + Math.cos(player.angle) * aimDist;
+    const ay = player.y + aimOffY + Math.sin(player.angle) * aimDist;
+    const aimPulse = 1 + Math.sin(Date.now() / 150) * 0.12;
+    ctx.globalAlpha = 0.3; ctx.strokeStyle = this.color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(ax, ay, 20 * aimPulse, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 0.9; ctx.fillStyle = this.color;
+    ctx.beginPath(); ctx.arc(ax, ay, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
   }
   drawHUD(ctx, w, h, player) {
     const F = Theme.fontUI;
@@ -466,7 +534,7 @@ class DartWeapon {
       const p = new Projectile(
         player.x + Math.cos(player.angle) * 16, player.y + Math.sin(player.angle) * 16,
         player.angle, 850, dmg,
-        { color: '#ccc', radius: 4, life: 1.2, trail: false, isDart: true }
+        { color: '#ccc', radius: 8, life: 1.2, trail: false, isDart: true }
       );
       projectiles.push(p);
       Audio.dart();
@@ -503,6 +571,17 @@ class DartWeapon {
       ctx.closePath(); ctx.fill();
       ctx.restore(); ctx.globalAlpha = 1;
     }
+    // Aim indicator — large circle + dot at hand level
+    const aimOffY = -20;
+    const aimDist = 30;
+    const ax = player.x + Math.cos(player.angle) * aimDist;
+    const ay = player.y + aimOffY + Math.sin(player.angle) * aimDist;
+    const aimPulse = 1 + Math.sin(Date.now() / 150) * 0.12;
+    ctx.globalAlpha = 0.3; ctx.strokeStyle = '#aaa'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(ax, ay, 20 * aimPulse, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 0.9; ctx.fillStyle = '#aaa';
+    ctx.beginPath(); ctx.arc(ax, ay, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
   }
   drawHUD(ctx, w, h, player) {
     const F = Theme.fontUI;
@@ -669,6 +748,8 @@ class Player {
     const isReleasing = w && (w.punchCooldown > 0 || w.slashing || (w.gunFireTimer > 0 && w.chainState === 'locked'));
     const isSniper = w instanceof SniperRifle;
     const isSniperFiring = isSniper && w._laserFlashTimer > 0;
+    const isSniperCharging = isSniper && w.holdTime > 0; // holding mouse = show gun anim
+    const isSniperCharged = isSniper && w.charged; // fully charged = locked on
 
     const isHook = w instanceof ChainGun;
     const isHookFlying = isHook && w.chainState === 'flying';
@@ -724,10 +805,21 @@ class Player {
         frames = anims.idle; fps = 8;
       }
     } else if (isSniper && anims.gun && anims.gun.length > 0) {
-      // Sniper: gun sprite ONLY when shooting, otherwise use normal run/idle
+      // Sniper: gun sprite during hold-to-charge, charged, and firing
       if (isSniperFiring) {
+        // Recoil frames after shot
         const recoilFrames = anims.gun.length > 8 ? [anims.gun[7], anims.gun[8]] : [anims.gun[anims.gun.length - 1]];
         frames = recoilFrames; fps = 10;
+      } else if (isSniperCharged) {
+        // Fully charged — freeze on aiming frame (frame ~5-6)
+        const aimFrame = Math.min(5, anims.gun.length - 1);
+        frames = [anims.gun[aimFrame]]; fps = 1;
+      } else if (isSniperCharging) {
+        // Charging — play first few gun frames as wind-up
+        const chargePct = clamp(w.holdTime / w.chargeThreshold, 0, 1);
+        const maxFrame = Math.min(5, anims.gun.length - 1);
+        const targetFrame = Math.floor(chargePct * maxFrame);
+        frames = [anims.gun[targetFrame]]; fps = 1;
       } else if (this.dashing && anims.run && anims.run.length > 0) {
         frames = anims.run; fps = 20;
       } else if ((Math.abs(this.vx) > 10 || Math.abs(this.vy) > 10) && anims.run && anims.run.length > 0) {
@@ -844,7 +936,7 @@ class Enemy {
     }
     // Behavior dispatch
     const b = this.type.behavior;
-    if (b === 'shoe') this._behaviorShoe(dt, player, dist);
+    if (b === 'shoe' || b === 'social') this._behaviorShoe(dt, player, dist);
     else if (b === 'spider') this._behaviorSpider(dt, player, dist);
     else if (b === 'water') { this._arena = arena; this._behaviorWater(dt, player, dist, enemyProjectiles); }
     else if (b === 'bat') this._behaviorBat(dt, player, dist);
@@ -995,7 +1087,7 @@ class Enemy {
         this._pillowState = 'lunge';
         this._pillowTimer = 0.4;
         this._engulfDir = Vec.norm(Vec.sub(player, this));
-        this.radius = 55;
+        this.radius = 28;
         Effects.shake(8, 0.15);
         Particles.burst(this.x, this.y, 15, '#aaf', 250);
         Audio.grapple();
@@ -1017,7 +1109,7 @@ class Enemy {
       }
     } else if (this._pillowState === 'windup') {
       this._pillowTimer -= dt;
-      this.radius = 40 + (0.8 - this._pillowTimer) * 20;
+      this.radius = 22 + (0.8 - this._pillowTimer) * 10;
       this.vx = (Math.random() - 0.5) * 120; this.vy = (Math.random() - 0.5) * 120;
       if (this._pillowTimer <= 0) {
         this._pillowState = 'lunge';
@@ -1027,7 +1119,7 @@ class Enemy {
       }
     } else if (this._pillowState === 'lunge') {
       this._pillowTimer -= dt;
-      this.radius = 58;
+      this.radius = 30;
       this.vx = this._engulfDir.x * 750;
       this.vy = this._engulfDir.y * 750;
       Particles.trail(this.x, this.y, '#aaf', 4);
@@ -1050,7 +1142,7 @@ class Enemy {
       this.x = lerp(this.x, player.x, 0.3);
       this.y = lerp(this.y, player.y, 0.3);
       this.vx = 0; this.vy = 0;
-      this.radius = 58 + Math.sin(Date.now() / 80) * 6;
+      this.radius = 28 + Math.sin(Date.now() / 80) * 3;
       if (Math.floor(Date.now() / 300) % 2 === 0 && !player.invincible) {
         player.takeDamage(5 * dt * 60);
       }
@@ -1062,7 +1154,7 @@ class Enemy {
       }
     } else if (this._pillowState === 'cooldown') {
       this._pillowTimer -= dt;
-      this.radius = lerp(this.radius, 40, 0.08);
+      this.radius = lerp(this.radius, 22, 0.08);
       const dir = Vec.norm(Vec.sub(player, this));
       this.vx = dir.x * this.speed * 0.5; this.vy = dir.y * this.speed * 0.5;
       if (this._pillowTimer <= 0) {
@@ -1204,9 +1296,7 @@ class Enemy {
       ctx.globalAlpha = 1; return;
     }
     const drawColor = this.hitFlash > 0 ? '#fff' : this.color;
-    // Shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.beginPath();
-    ctx.ellipse(this.x + 3, this.y + 5, this.radius * 1.1, this.radius * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+    // Shadow removed — was interfering with icon visibility
     // Stun indicator
     if (this.stunned) {
       ctx.strokeStyle = '#a0f'; ctx.lineWidth = 2;
@@ -1238,8 +1328,183 @@ class Enemy {
     ctx.globalAlpha = 1;
   }
 
+  // Map behavior to ASCII sprite name + base rotation offset
+  // Most sprites: bottom = head → need PI rotation so head points up (toward player)
+  // Exceptions: leather shoe & mirror → top = head → no extra rotation
+  _getAsciiSpriteInfo() {
+    const b = this.type.behavior;
+    // { name, headIsTop } — headIsTop means image top = head, no rotation needed
+    if (b === 'social') return { name: '__social_icon__', headIsTop: true };
+    if (b === 'shoe') {
+      if (this.type.heelColor) return { name: 'enemy_high_heel', headIsTop: false };
+      return { name: 'enemy_leather_shoe', headIsTop: true }; // exception: top is head
+    }
+    if (b === 'spider') return { name: 'enemy_spider', headIsTop: false };
+    if (b === 'water') return { name: 'enemy_water', headIsTop: false };
+    if (b === 'bat') return { name: 'enemy_bat', headIsTop: false, headAngle: -Math.PI * 0.75 }; // head at lower-left 45deg
+    if (b === 'scarecrow' || b === 'boss_real') return { name: 'enemy_scarecrow', headIsTop: false };
+    if (b === 'boss_mirror') return { name: 'enemy_mirror', headIsTop: true }; // exception: top is head
+    if (b === 'boss_spider') return { name: 'enemy_giant_spider', headIsTop: false };
+    if (b === 'boss_pillow') return null; // drawn as ghost icon, skip ASCII sprite
+    if (b === 'boss_tiger') return { name: 'enemy_paper_tiger', headIsTop: false };
+    return null;
+  }
+
   _drawShape(ctx, x, y, r, color) {
     const b = this.type.behavior;
+
+    // Ghost boss (pillow replacement) — Canvas drawn ghost shape
+    if (this.type.icon === 'ghost') {
+      const breathPhase = (this._breathPhase || (this._breathPhase = Math.random() * Math.PI * 2));
+      const t = Date.now() / 1000;
+      const breath = Math.sin(t * 2 + breathPhase);
+      const scaleY = 1 + breath * 0.1;
+      const s = r * 1.2;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(1, scaleY);
+      ctx.strokeStyle = Theme.primary; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      // Ghost body
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.5, s * 0.5);
+      ctx.lineTo(-s * 0.5, -s * 0.1);
+      ctx.bezierCurveTo(-s * 0.5, -s * 0.6, s * 0.5, -s * 0.6, s * 0.5, -s * 0.1);
+      ctx.lineTo(s * 0.5, s * 0.5);
+      // Wavy bottom
+      ctx.lineTo(s * 0.3, s * 0.35);
+      ctx.lineTo(s * 0.1, s * 0.5);
+      ctx.lineTo(-s * 0.1, s * 0.35);
+      ctx.lineTo(-s * 0.3, s * 0.5);
+      ctx.closePath();
+      ctx.stroke();
+      // Eyes — two circles
+      ctx.fillStyle = Theme.primary;
+      ctx.beginPath(); ctx.arc(-s * 0.18, -s * 0.15, s * 0.08, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(s * 0.18, -s * 0.15, s * 0.08, 0, Math.PI * 2); ctx.fill();
+      // Mouth — open circle
+      ctx.beginPath(); ctx.arc(0, s * 0.1, s * 0.1, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
+    // Social media icon enemies — drawn with Canvas lines in ASCII/monoline style
+    if (b === 'social') {
+      const breathPhase = (this._breathPhase || (this._breathPhase = Math.random() * Math.PI * 2));
+      const t = Date.now() / 1000;
+      const breath = Math.sin(t * 2.5 + breathPhase);
+      const scaleX = 1 - breath * 0.05;
+      const scaleY = 1 + breath * 0.08;
+      const s = r * 1.4; // base size
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scaleX, scaleY);
+      const iconCol = this.type.iconColor || Theme.primary;
+      ctx.strokeStyle = iconCol; ctx.lineWidth = 1.8; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.fillStyle = iconCol;
+
+      const icon = this.type.icon;
+      if (icon === '❤') {
+        // Heart — drawn with bezier curves, monoline
+        ctx.beginPath();
+        ctx.moveTo(0, s * 0.35);
+        ctx.bezierCurveTo(-s * 0.05, s * 0.15, -s * 0.45, s * 0.1, -s * 0.45, -s * 0.15);
+        ctx.bezierCurveTo(-s * 0.45, -s * 0.45, 0, -s * 0.45, 0, -s * 0.15);
+        ctx.bezierCurveTo(0, -s * 0.45, s * 0.45, -s * 0.45, s * 0.45, -s * 0.15);
+        ctx.bezierCurveTo(s * 0.45, s * 0.1, s * 0.05, s * 0.15, 0, s * 0.35);
+        ctx.closePath();
+        ctx.stroke();
+        // Inner detail — small +1 text
+        ctx.font = `${s * 0.3}px ${Theme.fontUI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('+1', 0, -s * 0.05);
+      } else if (icon === '🔄') {
+        // Retweet arrows — two curved arrows forming a cycle
+        const ar = s * 0.3;
+        // Top arrow (right)
+        ctx.beginPath();
+        ctx.arc(0, 0, ar, -Math.PI * 0.8, Math.PI * 0.1);
+        ctx.stroke();
+        // Arrow head
+        const ax1 = Math.cos(Math.PI * 0.1) * ar, ay1 = Math.sin(Math.PI * 0.1) * ar;
+        ctx.beginPath(); ctx.moveTo(ax1 - 4, ay1 - 6); ctx.lineTo(ax1, ay1); ctx.lineTo(ax1 + 6, ay1 - 3); ctx.stroke();
+        // Bottom arrow (left)
+        ctx.beginPath();
+        ctx.arc(0, 0, ar, Math.PI * 0.2, Math.PI * 1.1);
+        ctx.stroke();
+        const ax2 = Math.cos(Math.PI * 1.1) * ar, ay2 = Math.sin(Math.PI * 1.1) * ar;
+        ctx.beginPath(); ctx.moveTo(ax2 + 4, ay2 + 6); ctx.lineTo(ax2, ay2); ctx.lineTo(ax2 - 6, ay2 + 3); ctx.stroke();
+        // Center number
+        ctx.font = `${s * 0.25}px ${Theme.fontUI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('RT', 0, 0);
+      } else if (icon === '💬') {
+        // Speech bubble — rounded rect with tail
+        const bw = s * 0.45, bh = s * 0.32;
+        ctx.beginPath();
+        // Bubble body
+        ctx.moveTo(-bw + 4, -bh);
+        ctx.lineTo(bw - 4, -bh);
+        ctx.quadraticCurveTo(bw, -bh, bw, -bh + 4);
+        ctx.lineTo(bw, bh - 4);
+        ctx.quadraticCurveTo(bw, bh, bw - 4, bh);
+        // Tail
+        ctx.lineTo(bw * 0.1, bh);
+        ctx.lineTo(-bw * 0.15, bh + s * 0.18);
+        ctx.lineTo(-bw * 0.2, bh);
+        ctx.lineTo(-bw + 4, bh);
+        ctx.quadraticCurveTo(-bw, bh, -bw, bh - 4);
+        ctx.lineTo(-bw, -bh + 4);
+        ctx.quadraticCurveTo(-bw, -bh, -bw + 4, -bh);
+        ctx.closePath();
+        ctx.stroke();
+        // Dots inside ...
+        for (let i = -1; i <= 1; i++) {
+          ctx.beginPath(); ctx.arc(i * s * 0.12, 0, 2, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      ctx.restore();
+      return;
+    }
+
+    // Try ASCII sprite first
+    const info = this._getAsciiSpriteInfo();
+    if (info && AsciiSprite.has(info.name)) {
+      const baseScale = (r / 16) * (this.isBoss ? 1.2 : 0.9);
+      const baseRot = info.headAngle !== undefined ? info.headAngle : (info.headIsTop ? 0 : Math.PI);
+      const faceAngle = this.angle + Math.PI / 2 + baseRot;
+
+      // Breathing effect — organic pulsing scale
+      // Use unique phase per enemy (based on spawn position) so they don't all sync
+      const breathPhase = (this._breathPhase || (this._breathPhase = Math.random() * Math.PI * 2));
+      const t = Date.now() / 1000;
+      const breathCycle = Math.sin(t * 2.2 + breathPhase); // main breath
+      const breathFast = Math.sin(t * 5.5 + breathPhase) * 0.3; // subtle fast twitch
+      const breathAmt = 0.08 + (this.isBoss ? 0.04 : 0); // boss breathes bigger
+
+      // Spider: extend left-right (scaleX pulses, scaleY inverse)
+      // Others: extend up-down (scaleY pulses, scaleX inverse)
+      const isSpider = (b === 'spider' || b === 'boss_spider');
+      let scaleX, scaleY;
+      if (isSpider) {
+        scaleX = baseScale * (1 + (breathCycle + breathFast) * breathAmt);
+        scaleY = baseScale * (1 - breathCycle * breathAmt * 0.5);
+      } else {
+        scaleX = baseScale * (1 - breathCycle * breathAmt * 0.5);
+        scaleY = baseScale * (1 + (breathCycle + breathFast) * breathAmt);
+      }
+
+      // Draw with non-uniform scale
+      const sprite = AsciiSprite.get(info.name);
+      if (sprite) {
+        ctx.save();
+        ctx.translate(x, y);
+        if (faceAngle) ctx.rotate(faceAngle);
+        ctx.scale(scaleX, scaleY);
+        ctx.drawImage(sprite.canvas, -sprite.cx, -sprite.cy);
+        ctx.restore();
+      }
+      return;
+    }
+
+    // --- Fallback: old geometric shapes ---
     // Glow
     ctx.globalAlpha = (ctx.globalAlpha || 1) * 0.12;
     ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r * 2.2, 0, Math.PI * 2); ctx.fill();
@@ -1383,7 +1648,20 @@ class Enemy {
 // ENEMY TYPE DEFINITIONS
 // ============================
 const EnemyTypes = {
-  // Level 1: Perfectness
+  // Level 1: Perfectness — Social media icons
+  LIKE: {
+    hp: 50, speed: 140, radius: 14, color: '#a050e0', damage: 10, attackCooldown: 1.5,
+    behavior: 'social', icon: '❤', iconColor: '#a050e0', score: 10,
+  },
+  RETWEET: {
+    hp: 60, speed: 120, radius: 14, color: '#2a2', damage: 12, attackCooldown: 1.8,
+    behavior: 'social', icon: '🔄', iconColor: '#2a2', score: 12,
+  },
+  COMMENT: {
+    hp: 70, speed: 110, radius: 15, color: '#48f', damage: 14, attackCooldown: 2.0,
+    behavior: 'social', icon: '💬', iconColor: '#48f', score: 12,
+  },
+  // Level 1: (hidden, kept for reference)
   HIGH_HEEL: {
     hp: 60, speed: 130, radius: 13, color: '#e5a', damage: 12, attackCooldown: 1.5,
     behavior: 'shoe', heelColor: '#c38', score: 10,
@@ -1412,8 +1690,8 @@ const EnemyTypes = {
     floatingText: ["i'm the worst", "i'm stupid", "i cannot do it", "why bother"],
   },
   BOSS_PILLOW: {
-    hp: 600, speed: 180, radius: 40, color: '#88c', damage: 35, attackCooldown: 1.0,
-    behavior: 'boss_pillow', isBoss: true, score: 100,
+    hp: 400, speed: 180, radius: 22, color: '#88c', damage: 30, attackCooldown: 1.0,
+    behavior: 'boss_pillow', isBoss: true, score: 100, icon: 'ghost',
   },
   // Level 4: Fear
   BAT: {

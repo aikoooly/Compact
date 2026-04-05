@@ -578,11 +578,24 @@ const AsciiSprite = {
 
         // Auto-remove white/gray background (image has no real alpha)
         const brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-        // Skip if all channels are close together (gray) AND bright
         const maxC = Math.max(r, g, b), minC = Math.min(r, g, b);
         const spread = maxC - minC; // color spread: 0 = pure gray
-        if (spread < 20 && brightness > 0.82) continue; // gray bg
-        if (r > 225 && g > 225 && b > 225) continue;    // near-white
+
+        if (opts.softBg) {
+          // Keep slightly off-white pixels (pillow etc) but remove pure gray/white bg
+          // Only skip if VERY uniform gray AND very bright (pure background)
+          if (spread < 8 && brightness > 0.95) continue;
+          if (a < 80) continue;
+        } else if (opts.strictBg) {
+          // Strict background removal — only skip very bright + very gray
+          if (spread < 10 && brightness > 0.92) continue;
+          if (r > 245 && g > 245 && b > 245) continue;
+        } else {
+          // Default: remove gray bg + near-white
+          const grayBrightThresh = opts.grayThreshold || 0.82;
+          if (spread < 20 && brightness > grayBrightThresh) continue;
+          if (r > 225 && g > 225 && b > 225) continue;
+        }
 
         const charIdx = Math.floor((1 - brightness) * (chars.length - 1));
         const ch = chars[clamp(charIdx, 0, chars.length - 1)];
@@ -701,5 +714,440 @@ async function initAsciiSprites() {
   }
 
   console.log(`Sprites loaded! idle:${idleFrames.length} run:${runFrames.length} attack:${attackFrames.length}`);
+
+  // --- Generate procedural enemy ASCII sprites ---
+  await loadMonsterSprites();
+}
+
+// =============================================================
+// Procedural Enemy Shape → ASCII Sprite Generator
+// Uses pretext-style brightness+width dual matching
+// =============================================================
+const EnemyArt = {
+  // Character palette sorted by brightness (built once)
+  _palette: null,
+  _font: '5px monospace',
+
+  buildPalette() {
+    if (this._palette) return;
+    const chars = ' .\'`^",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$';
+    const entries = [];
+    const c = document.createElement('canvas');
+    c.width = 28; c.height = 28;
+    const ctx = c.getContext('2d');
+    const mctx = document.createElement('canvas').getContext('2d');
+    mctx.font = this._font;
+
+    for (const ch of chars) {
+      // Measure brightness: render char, sum alpha
+      ctx.clearRect(0, 0, 28, 28);
+      ctx.fillStyle = '#fff'; ctx.font = '20px monospace'; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+      ctx.fillText(ch, 14, 14);
+      const data = ctx.getImageData(0, 0, 28, 28).data;
+      let alphaSum = 0;
+      for (let i = 3; i < data.length; i += 4) alphaSum += data[i];
+      const brightness = alphaSum / (255 * 784);
+      // Measure width
+      const width = mctx.measureText(ch).width;
+      entries.push({ ch, brightness, width });
+    }
+    this._palette = entries.sort((a, b) => a.brightness - b.brightness);
+  },
+
+  // Find best character for target brightness+width (pretext algorithm)
+  findBest(targetBrightness, targetWidth) {
+    const p = this._palette;
+    if (!p || p.length === 0) return ' ';
+    // Binary search
+    let lo = 0, hi = p.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (p[mid].brightness < targetBrightness) lo = mid + 1;
+      else hi = mid;
+    }
+    // Score nearby ±15
+    let best = p[lo], bestErr = Infinity;
+    for (let i = Math.max(0, lo - 15); i < Math.min(p.length, lo + 15); i++) {
+      const e = p[i];
+      const err = Math.abs(e.brightness - targetBrightness) * 2.5
+                + (targetWidth > 0 ? Math.abs(e.width - targetWidth) / targetWidth : 0);
+      if (err < bestErr) { bestErr = err; best = e; }
+    }
+    return best.ch;
+  },
+
+  // Draw a shape to a temp canvas, then convert to ASCII sprite
+  shapeToAscii(name, drawFn, size, color, asciiW) {
+    this.buildPalette();
+    asciiW = asciiW || 30;
+    const charRatio = 0.55;
+    const asciiH = Math.round(asciiW * charRatio);
+
+    // Draw shape to temp canvas
+    const shapeCanvas = document.createElement('canvas');
+    shapeCanvas.width = size; shapeCanvas.height = size;
+    const sctx = shapeCanvas.getContext('2d');
+    drawFn(sctx, size);
+
+    // Sample and convert
+    const sampleCanvas = document.createElement('canvas');
+    sampleCanvas.width = asciiW; sampleCanvas.height = asciiH;
+    const sampCtx = sampleCanvas.getContext('2d');
+    sampCtx.drawImage(shapeCanvas, 0, 0, asciiW, asciiH);
+    const data = sampCtx.getImageData(0, 0, asciiW, asciiH).data;
+
+    // Render ASCII
+    const fontSize = 5;
+    const font = `${fontSize}px monospace`;
+    const mctx = document.createElement('canvas').getContext('2d');
+    mctx.font = font;
+    const charW = mctx.measureText('M').width;
+    const lineH = fontSize * 1.15;
+    const w = Math.ceil(asciiW * charW) + 4;
+    const h = Math.ceil(asciiH * lineH) + 4;
+
+    const outCanvas = document.createElement('canvas');
+    outCanvas.width = w; outCanvas.height = h;
+    const ctx = outCanvas.getContext('2d');
+    ctx.font = font; ctx.textBaseline = 'top';
+
+    // Parse color
+    const rgb = hexToRgb(color) || { r: 11, g: 20, b: 26 };
+
+    for (let y = 0; y < asciiH; y++) {
+      for (let x = 0; x < asciiW; x++) {
+        const i = (y * asciiW + x) * 4;
+        const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
+        if (a < 30) continue;
+        const brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        if (brightness > 0.95 && a < 200) continue;
+
+        const ch = this.findBest(1 - brightness * (a / 255), charW);
+        if (ch === ' ') continue;
+
+        // Tint with enemy color, modulated by brightness
+        const br = Math.min(255, Math.round(rgb.r + (255 - rgb.r) * brightness * 0.3));
+        const bg = Math.min(255, Math.round(rgb.g + (255 - rgb.g) * brightness * 0.3));
+        const bb = Math.min(255, Math.round(rgb.b + (255 - rgb.b) * brightness * 0.3));
+        ctx.fillStyle = `rgba(${br},${bg},${bb},${a / 255})`;
+        ctx.fillText(ch, 2 + x * charW, 2 + y * lineH);
+      }
+    }
+
+    AsciiSprite._cache[name] = { canvas: outCanvas, w, h, cx: w / 2, cy: h / 2 };
+    return name;
+  },
+};
+
+// ============================================================
+// Load monster sprites from image files
+// ============================================================
+async function loadMonsterSprites() {
+  const monsterPath = 'assets/monster/';
+  const monsterOpts = { width: 35, fontSize: 5, colored: true, dense: true, brighten: 1.4 };
+  const bossOpts = { width: 50, fontSize: 5, colored: true, dense: true, brighten: 1.4 };
+
+  // Map: sprite name used in code → file path
+  const monsters = {
+    'enemy_high_heel':    { src: monsterPath + 'L1enemy_heel.png', opts: monsterOpts },
+    'enemy_leather_shoe': { src: monsterPath + 'L1enemy_leather.png', opts: monsterOpts },
+    'enemy_mirror':       { src: monsterPath + 'L1boss_mirror.png', opts: bossOpts },
+    'enemy_spider':       { src: monsterPath + 'L2enemy_spider.png', opts: monsterOpts },
+    'enemy_giant_spider': { src: monsterPath + 'L2boss_spider.png', opts: bossOpts },
+    'enemy_water':        { src: monsterPath + 'L3enemy_water.png', opts: monsterOpts },
+    'enemy_pillow':       { src: monsterPath + 'L3boss_pillow.png', opts: { ...bossOpts, softBg: true, brighten: 1.0 } },
+    'enemy_bat':          { src: monsterPath + 'L4enemy_bat.png', opts: { ...monsterOpts, grayThreshold: 0.35 } },
+    'enemy_paper_tiger':  { src: monsterPath + 'L4boss_tiger.png', opts: bossOpts },
+    'enemy_scarecrow':    { src: monsterPath + 'L6enemy_scarecrow.png', opts: monsterOpts },
+  };
+
+  // Also load memory card diamond
+  monsters['memory_diamond'] = { src: monsterPath + 'diamond_blue.png', opts: { width: 20, fontSize: 5, colored: true, dense: true, brighten: 0.7 } };
+
+  const promises = Object.entries(monsters).map(([name, { src, opts }]) =>
+    AsciiSprite.fromImage(name, src, opts)
+  );
+  await Promise.all(promises);
+  console.log(`Monster sprites loaded! (${Object.keys(monsters).length} types)`);
+}
+
+// ============================================================
+// Legacy procedural enemy art (kept as fallback)
+// ============================================================
+function generateEnemySprites() {
+  EnemyArt.buildPalette();
+  const S = 128; // source canvas size
+
+  // --- HIGH HEEL SHOE (L1) ---
+  EnemyArt.shapeToAscii('enemy_high_heel', (ctx, s) => {
+    ctx.fillStyle = '#1a1a2e'; ctx.strokeStyle = '#0b141a'; ctx.lineWidth = 3;
+    ctx.beginPath();
+    // Heel
+    ctx.moveTo(s*0.2, s*0.3); ctx.lineTo(s*0.75, s*0.35);
+    ctx.lineTo(s*0.8, s*0.5); ctx.lineTo(s*0.75, s*0.55);
+    // Sole
+    ctx.lineTo(s*0.3, s*0.55); ctx.lineTo(s*0.25, s*0.85);
+    ctx.lineTo(s*0.18, s*0.85); ctx.lineTo(s*0.15, s*0.55);
+    ctx.lineTo(s*0.1, s*0.5);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // Heel spike
+    ctx.fillStyle = '#c44'; ctx.beginPath();
+    ctx.moveTo(s*0.2, s*0.55); ctx.lineTo(s*0.23, s*0.9);
+    ctx.lineTo(s*0.17, s*0.9); ctx.closePath(); ctx.fill();
+    // Toe detail
+    ctx.strokeStyle = '#334'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(s*0.65, s*0.42, s*0.08, 0, Math.PI); ctx.stroke();
+  }, S, '#1a1a2e', 28);
+
+  // --- LEATHER SHOE (L1) ---
+  EnemyArt.shapeToAscii('enemy_leather_shoe', (ctx, s) => {
+    ctx.fillStyle = '#2a1a0a'; ctx.strokeStyle = '#0b141a'; ctx.lineWidth = 3;
+    // Rounded shoe from above
+    ctx.beginPath();
+    ctx.ellipse(s*0.5, s*0.45, s*0.35, s*0.2, 0, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+    // Sole
+    ctx.fillStyle = '#1a0a00';
+    ctx.beginPath();
+    ctx.ellipse(s*0.5, s*0.5, s*0.33, s*0.15, 0, 0, Math.PI);
+    ctx.fill();
+    // Lace detail
+    ctx.strokeStyle = '#555'; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 4; i++) {
+      const lx = s*0.35 + i * s*0.08;
+      ctx.beginPath(); ctx.moveTo(lx, s*0.38); ctx.lineTo(lx + s*0.04, s*0.32); ctx.stroke();
+    }
+  }, S, '#2a1a0a', 28);
+
+  // --- MIRROR BOSS (L1) ---
+  EnemyArt.shapeToAscii('enemy_mirror', (ctx, s) => {
+    // Ornate frame
+    ctx.strokeStyle = '#8a7030'; ctx.lineWidth = 5;
+    ctx.fillStyle = '#c0d8e8';
+    const rx = s*0.15, ry = s*0.1, rw = s*0.7, rh = s*0.8;
+    ctx.beginPath();
+    ctx.roundRect(rx, ry, rw, rh, 12);
+    ctx.fill(); ctx.stroke();
+    // Reflection shimmer
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.beginPath(); ctx.moveTo(s*0.25, s*0.15); ctx.lineTo(s*0.45, s*0.15);
+    ctx.lineTo(s*0.3, s*0.75); ctx.lineTo(s*0.2, s*0.75); ctx.closePath(); ctx.fill();
+    // Crack lines
+    ctx.strokeStyle = '#556'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(s*0.5, s*0.3); ctx.lineTo(s*0.6, s*0.5);
+    ctx.lineTo(s*0.45, s*0.65); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(s*0.5, s*0.3); ctx.lineTo(s*0.35, s*0.55); ctx.stroke();
+  }, S, '#4a6080', 35);
+
+  // --- SPIDER (L2) ---
+  EnemyArt.shapeToAscii('enemy_spider', (ctx, s) => {
+    const cx = s*0.5, cy = s*0.5;
+    ctx.fillStyle = '#1a1a1a'; ctx.strokeStyle = '#0b0b0b'; ctx.lineWidth = 2;
+    // Body
+    ctx.beginPath(); ctx.ellipse(cx, cy, s*0.12, s*0.1, 0, 0, Math.PI*2); ctx.fill();
+    // Head
+    ctx.beginPath(); ctx.arc(cx, cy - s*0.15, s*0.07, 0, Math.PI*2); ctx.fill();
+    // 8 legs
+    ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 2.5;
+    for (let i = 0; i < 4; i++) {
+      const angle = (i - 1.5) * 0.4;
+      // Left
+      ctx.beginPath();
+      ctx.moveTo(cx - s*0.1, cy + (i-1.5)*s*0.06);
+      ctx.quadraticCurveTo(cx - s*0.3, cy + (i-1.5)*s*0.1 - s*0.1, cx - s*0.35, cy + (i-1.5)*s*0.12 + s*0.05);
+      ctx.stroke();
+      // Right
+      ctx.beginPath();
+      ctx.moveTo(cx + s*0.1, cy + (i-1.5)*s*0.06);
+      ctx.quadraticCurveTo(cx + s*0.3, cy + (i-1.5)*s*0.1 - s*0.1, cx + s*0.35, cy + (i-1.5)*s*0.12 + s*0.05);
+      ctx.stroke();
+    }
+    // Eyes (red dots)
+    ctx.fillStyle = '#c44';
+    ctx.beginPath(); ctx.arc(cx - s*0.03, cy - s*0.16, s*0.02, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + s*0.03, cy - s*0.16, s*0.02, 0, Math.PI*2); ctx.fill();
+  }, S, '#1a1a1a', 32);
+
+  // --- GIANT SPIDER BOSS (L2) ---
+  EnemyArt.shapeToAscii('enemy_spider_boss', (ctx, s) => {
+    const cx = s*0.5, cy = s*0.5;
+    ctx.fillStyle = '#0a0a0a'; ctx.strokeStyle = '#111'; ctx.lineWidth = 3;
+    // Fat abdomen
+    ctx.beginPath(); ctx.ellipse(cx, cy + s*0.05, s*0.22, s*0.18, 0, 0, Math.PI*2); ctx.fill();
+    // Thorax
+    ctx.beginPath(); ctx.ellipse(cx, cy - s*0.15, s*0.14, s*0.12, 0, 0, Math.PI*2); ctx.fill();
+    // Head
+    ctx.beginPath(); ctx.arc(cx, cy - s*0.28, s*0.08, 0, Math.PI*2); ctx.fill();
+    // 8 thick legs
+    ctx.strokeStyle = '#0a0a0a'; ctx.lineWidth = 4;
+    for (let i = 0; i < 4; i++) {
+      const yo = (i - 1.5) * s*0.08;
+      ctx.beginPath();
+      ctx.moveTo(cx - s*0.18, cy + yo);
+      ctx.quadraticCurveTo(cx - s*0.38, cy + yo - s*0.12, cx - s*0.42, cy + yo + s*0.08);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx + s*0.18, cy + yo);
+      ctx.quadraticCurveTo(cx + s*0.38, cy + yo - s*0.12, cx + s*0.42, cy + yo + s*0.08);
+      ctx.stroke();
+    }
+    // Red eyes
+    ctx.fillStyle = '#f33';
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath(); ctx.arc(cx + i * s*0.04, cy - s*0.3, s*0.025, 0, Math.PI*2); ctx.fill();
+    }
+    // Fangs
+    ctx.strokeStyle = '#c44'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx - s*0.04, cy - s*0.22); ctx.lineTo(cx - s*0.06, cy - s*0.16); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + s*0.04, cy - s*0.22); ctx.lineTo(cx + s*0.06, cy - s*0.16); ctx.stroke();
+  }, S, '#0a0a0a', 40);
+
+  // --- WATER FLOW (L3) ---
+  EnemyArt.shapeToAscii('enemy_water', (ctx, s) => {
+    ctx.fillStyle = '#2060a0';
+    // Wavy water shape
+    ctx.beginPath(); ctx.moveTo(s*0.15, s*0.35);
+    ctx.bezierCurveTo(s*0.3, s*0.2, s*0.5, s*0.2, s*0.7, s*0.35);
+    ctx.bezierCurveTo(s*0.85, s*0.45, s*0.8, s*0.6, s*0.7, s*0.65);
+    ctx.bezierCurveTo(s*0.5, s*0.75, s*0.3, s*0.7, s*0.2, s*0.6);
+    ctx.bezierCurveTo(s*0.1, s*0.5, s*0.1, s*0.4, s*0.15, s*0.35);
+    ctx.fill();
+    // Wave lines
+    ctx.strokeStyle = '#4080c0'; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 3; i++) {
+      const y = s*0.38 + i * s*0.1;
+      ctx.beginPath();
+      ctx.moveTo(s*0.25, y);
+      ctx.quadraticCurveTo(s*0.4, y - s*0.05, s*0.55, y);
+      ctx.quadraticCurveTo(s*0.65, y + s*0.05, s*0.75, y);
+      ctx.stroke();
+    }
+    // Drips
+    ctx.fillStyle = '#3070b0';
+    ctx.beginPath(); ctx.ellipse(s*0.35, s*0.72, s*0.03, s*0.05, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(s*0.6, s*0.7, s*0.025, s*0.04, 0, 0, Math.PI*2); ctx.fill();
+  }, S, '#2060a0', 26);
+
+  // --- PILLOW BOSS (L3) ---
+  EnemyArt.shapeToAscii('enemy_pillow', (ctx, s) => {
+    // Soft pillow shape
+    ctx.fillStyle = '#d0c0b0'; ctx.strokeStyle = '#a09080'; ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(s*0.15, s*0.3);
+    ctx.quadraticCurveTo(s*0.5, s*0.1, s*0.85, s*0.3);
+    ctx.quadraticCurveTo(s*0.95, s*0.5, s*0.85, s*0.7);
+    ctx.quadraticCurveTo(s*0.5, s*0.9, s*0.15, s*0.7);
+    ctx.quadraticCurveTo(s*0.05, s*0.5, s*0.15, s*0.3);
+    ctx.fill(); ctx.stroke();
+    // Puffy wrinkles
+    ctx.strokeStyle = '#b0a090'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(s*0.3, s*0.35); ctx.quadraticCurveTo(s*0.5, s*0.45, s*0.7, s*0.35); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(s*0.3, s*0.65); ctx.quadraticCurveTo(s*0.5, s*0.55, s*0.7, s*0.65); ctx.stroke();
+    // Sleepy eyes
+    ctx.strokeStyle = '#555'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(s*0.38, s*0.48, s*0.04, 0, Math.PI); ctx.stroke();
+    ctx.beginPath(); ctx.arc(s*0.62, s*0.48, s*0.04, 0, Math.PI); ctx.stroke();
+  }, S, '#b0a090', 38);
+
+  // --- BAT (L4) ---
+  EnemyArt.shapeToAscii('enemy_bat', (ctx, s) => {
+    ctx.fillStyle = '#4a2060'; ctx.strokeStyle = '#3a1050'; ctx.lineWidth = 2;
+    const cx = s*0.5, cy = s*0.45;
+    // Body
+    ctx.beginPath(); ctx.ellipse(cx, cy, s*0.08, s*0.12, 0, 0, Math.PI*2); ctx.fill();
+    // Left wing
+    ctx.beginPath();
+    ctx.moveTo(cx - s*0.06, cy - s*0.05);
+    ctx.quadraticCurveTo(cx - s*0.35, cy - s*0.3, cx - s*0.42, cy - s*0.1);
+    ctx.quadraticCurveTo(cx - s*0.3, cy, cx - s*0.2, cy + s*0.05);
+    ctx.lineTo(cx - s*0.1, cy + s*0.02);
+    ctx.fill(); ctx.stroke();
+    // Right wing
+    ctx.beginPath();
+    ctx.moveTo(cx + s*0.06, cy - s*0.05);
+    ctx.quadraticCurveTo(cx + s*0.35, cy - s*0.3, cx + s*0.42, cy - s*0.1);
+    ctx.quadraticCurveTo(cx + s*0.3, cy, cx + s*0.2, cy + s*0.05);
+    ctx.lineTo(cx + s*0.1, cy + s*0.02);
+    ctx.fill(); ctx.stroke();
+    // Ears
+    ctx.beginPath();
+    ctx.moveTo(cx - s*0.05, cy - s*0.1); ctx.lineTo(cx - s*0.08, cy - s*0.2); ctx.lineTo(cx - s*0.02, cy - s*0.12); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx + s*0.05, cy - s*0.1); ctx.lineTo(cx + s*0.08, cy - s*0.2); ctx.lineTo(cx + s*0.02, cy - s*0.12); ctx.fill();
+    // Eyes
+    ctx.fillStyle = '#f80';
+    ctx.beginPath(); ctx.arc(cx - s*0.03, cy - s*0.06, s*0.015, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + s*0.03, cy - s*0.06, s*0.015, 0, Math.PI*2); ctx.fill();
+  }, S, '#4a2060', 30);
+
+  // --- PAPER TIGER BOSS (L4) ---
+  EnemyArt.shapeToAscii('enemy_tiger', (ctx, s) => {
+    ctx.fillStyle = '#d4a040'; ctx.strokeStyle = '#0b141a'; ctx.lineWidth = 2;
+    // Head
+    ctx.beginPath(); ctx.arc(s*0.5, s*0.3, s*0.18, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    // Ears
+    ctx.beginPath();
+    ctx.moveTo(s*0.35, s*0.18); ctx.lineTo(s*0.3, s*0.05); ctx.lineTo(s*0.42, s*0.15); ctx.fill(); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(s*0.65, s*0.18); ctx.lineTo(s*0.7, s*0.05); ctx.lineTo(s*0.58, s*0.15); ctx.fill(); ctx.stroke();
+    // Body
+    ctx.beginPath(); ctx.ellipse(s*0.5, s*0.6, s*0.22, s*0.2, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    // Stripes
+    ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 2.5;
+    for (let i = 0; i < 4; i++) {
+      const x = s*0.35 + i * s*0.08;
+      ctx.beginPath(); ctx.moveTo(x, s*0.5); ctx.lineTo(x + s*0.02, s*0.7); ctx.stroke();
+    }
+    // Face
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(s*0.43, s*0.28, s*0.035, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(s*0.57, s*0.28, s*0.035, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#0b141a';
+    ctx.beginPath(); ctx.arc(s*0.43, s*0.28, s*0.02, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(s*0.57, s*0.28, s*0.02, 0, Math.PI*2); ctx.fill();
+    // Nose
+    ctx.fillStyle = '#c44'; ctx.beginPath();
+    ctx.moveTo(s*0.48, s*0.34); ctx.lineTo(s*0.52, s*0.34); ctx.lineTo(s*0.5, s*0.37); ctx.fill();
+    // Paper fold lines (it's made of paper!)
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(s*0.2, s*0.4); ctx.lineTo(s*0.8, s*0.4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(s*0.5, s*0.1); ctx.lineTo(s*0.5, s*0.8); ctx.stroke();
+    ctx.setLineDash([]);
+  }, S, '#b08030', 36);
+
+  // --- SCARECROW (L6) ---
+  EnemyArt.shapeToAscii('enemy_scarecrow', (ctx, s) => {
+    ctx.fillStyle = '#8a7030'; ctx.strokeStyle = '#5a4020'; ctx.lineWidth = 2;
+    // Stick body (cross shape from top)
+    ctx.fillStyle = '#6a5020';
+    ctx.fillRect(s*0.47, s*0.2, s*0.06, s*0.6); // vertical
+    ctx.fillRect(s*0.25, s*0.3, s*0.5, s*0.06); // horizontal
+    // Head (burlap sack)
+    ctx.fillStyle = '#c0a060';
+    ctx.beginPath(); ctx.arc(s*0.5, s*0.18, s*0.1, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    // Hat
+    ctx.fillStyle = '#5a4020';
+    ctx.fillRect(s*0.35, s*0.06, s*0.3, s*0.05);
+    ctx.fillRect(s*0.4, s*0.0, s*0.2, s*0.07);
+    // Face
+    ctx.fillStyle = '#333';
+    ctx.beginPath(); ctx.arc(s*0.46, s*0.17, s*0.015, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(s*0.54, s*0.17, s*0.015, 0, Math.PI*2); ctx.fill();
+    // Stitched mouth
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(s*0.44, s*0.22); ctx.lineTo(s*0.56, s*0.22); ctx.stroke();
+    for (let i = 0; i < 4; i++) {
+      const x = s*0.45 + i * s*0.035;
+      ctx.beginPath(); ctx.moveTo(x, s*0.215); ctx.lineTo(x, s*0.225); ctx.stroke();
+    }
+    // Straw tufts
+    ctx.strokeStyle = '#d0b050'; ctx.lineWidth = 1;
+    for (let a = -0.5; a <= 0.5; a += 0.25) {
+      ctx.beginPath(); ctx.moveTo(s*0.25, s*0.33); ctx.lineTo(s*0.15, s*0.33 + a * s*0.15); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(s*0.75, s*0.33); ctx.lineTo(s*0.85, s*0.33 + a * s*0.15); ctx.stroke();
+    }
+  }, S, '#8a6020', 28);
+
+  console.log('Enemy ASCII sprites generated!');
 }
 

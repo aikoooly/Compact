@@ -134,28 +134,49 @@ class MemoryCard {
     this.bobPhase += dt * 3;
     if (!this.collected && Vec.dist(this, player) < 30) {
       this.collected = true;
+      // Heal player +10 HP
+      player.hp = Math.min(player.hp + 10, player.maxHp);
       Audio.waveComplete();
-      Particles.burst(this.x, this.y, 12, hsl(this.glowHue, 80, 70), 150);
+      Particles.burst(this.x, this.y, 12, '#1b7ed6', 150);
       return true; // signal collected
     }
     return false;
   }
   draw(ctx) {
     if (this.collected) return;
-    const bob = Math.sin(this.bobPhase) * 3;
-    // Glow
-    ctx.globalAlpha = 0.2 + Math.sin(this.bobPhase * 0.5) * 0.1;
-    ctx.fillStyle = hsl(this.glowHue, 80, 60);
-    ctx.beginPath(); ctx.arc(this.x, this.y + bob, 18, 0, Math.PI * 2); ctx.fill();
-    // Card shape
-    ctx.globalAlpha = 0.9;
-    ctx.fillStyle = Theme.white; ctx.fillRect(this.x - 10, this.y - 14 + bob, 20, 28);
-    ctx.strokeStyle = hsl(this.glowHue, 80, 60); ctx.lineWidth = 1.5;
-    ctx.strokeRect(this.x - 10, this.y - 14 + bob, 20, 28);
-    // Text symbol
-    ctx.fillStyle = hsl(this.glowHue, 80, 70); ctx.font = 'bold 12px serif'; ctx.textAlign = 'center';
-    ctx.fillText('M', this.x, this.y + 4 + bob);
-    ctx.globalAlpha = 1;
+    const t = this.bobPhase;
+    const bob = Math.sin(t * 0.8) * 4; // slower bob
+    const x = this.x, y = this.y + bob;
+
+    // Slow breathing scale
+    const breath = 1 + Math.sin(t * 0.6) * 0.1;
+    // Slow shimmer — gentle twinkle
+    const shimmer = 0.75 + Math.sin(t * 0.8) * 0.2;
+
+    // Try ASCII diamond sprite
+    if (AsciiSprite.has('memory_diamond')) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(breath, breath);
+      ctx.globalAlpha = shimmer;
+      const sprite = AsciiSprite.get('memory_diamond');
+      ctx.drawImage(sprite.canvas, -sprite.cx, -sprite.cy);
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    } else {
+      // Fallback: simple diamond outline
+      const s = 12;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(breath, breath);
+      ctx.globalAlpha = shimmer;
+      ctx.strokeStyle = Theme.accent; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(0, -s); ctx.lineTo(s, 0); ctx.lineTo(0, s); ctx.lineTo(-s, 0);
+      ctx.closePath(); ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
   }
 }
 
@@ -258,8 +279,26 @@ class WaveManager {
       e.update(dt, player, this.enemyProjectiles, arena);
       if (e.canDamagePlayer(player) && !player.invincible && !player.dashing) {
         player.takeDamage(e.damage);
+        // Knockback away from enemy — but don't stack multiple knockbacks
         const kb = Vec.norm(Vec.sub(player, e));
         player.x += kb.x * 25; player.y += kb.y * 25;
+        break; // only one enemy can damage per frame to prevent stacking
+      }
+    }
+    // Push player out of overlapping enemies (no damage, just separation)
+    for (const e of this.enemies) {
+      if (e.dead || e.dying || e.spawnTimer > 0) continue;
+      const dist = Vec.dist(e, player);
+      const minDist = e.radius + player.radius;
+      if (dist < minDist && dist > 0) {
+        const overlap = minDist - dist;
+        const push = Vec.norm(Vec.sub(player, e));
+        // Only push player slightly — don't block movement
+        player.x += push.x * overlap * 0.3;
+        player.y += push.y * overlap * 0.3;
+        // Push enemy away more
+        e.x -= push.x * overlap * 0.7;
+        e.y -= push.y * overlap * 0.7;
       }
     }
     // Enemy projectiles
