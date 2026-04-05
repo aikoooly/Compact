@@ -111,7 +111,7 @@ class BoxingGloves {
   constructor() {
     this.name = 'BOXING GLOVES'; this.color = Theme.accent;
     this.chargeTime = 0; this.charging = false;
-    this.punchCooldown = 0; this.baseRange = 110;
+    this.punchCooldown = 0; this.baseRange = 150;
     this.baseDamage = 100; // at full charge
     this.lockedAngle = 0; // direction locked at charge start
   }
