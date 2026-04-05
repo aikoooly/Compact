@@ -292,9 +292,9 @@ const Levels = [
       { title: 'Level 1: Perfectness', text: 'the feed never stops. the likes, the comments, the comparisons.\nthey come faster than you can think.\n\nHold LEFT CLICK to charge your punch. Tap for quick hits.\nRIGHT CLICK to dash toward cursor.\nWASD to move.' },
     ],
     waves: [
-      { spawns: [{ type: EnemyTypes.LIKE, count: 3, delay: 0.5 }, { type: EnemyTypes.COMMENT, count: 2, delay: 0.5 }] },
-      { spawns: [{ type: EnemyTypes.LIKE, count: 3, delay: 0.4 }, { type: EnemyTypes.RETWEET, count: 3, delay: 0.4 }, { type: EnemyTypes.COMMENT, count: 2, delay: 0.4 }] },
-      { spawns: [{ type: EnemyTypes.LIKE, count: 4, delay: 0.3 }, { type: EnemyTypes.RETWEET, count: 3, delay: 0.3 }, { type: EnemyTypes.COMMENT, count: 3, delay: 0.3 }] },
+      { spawns: [{ type: EnemyTypes.LIKE, count: 2, delay: 0.6 }, { type: EnemyTypes.COMMENT, count: 1, delay: 0.6 }] },
+      { spawns: [{ type: EnemyTypes.LIKE, count: 2, delay: 0.5 }, { type: EnemyTypes.RETWEET, count: 2, delay: 0.5 }, { type: EnemyTypes.COMMENT, count: 1, delay: 0.5 }] },
+      { spawns: [{ type: EnemyTypes.LIKE, count: 3, delay: 0.4 }, { type: EnemyTypes.RETWEET, count: 2, delay: 0.4 }, { type: EnemyTypes.COMMENT, count: 2, delay: 0.4 }] },
       { spawns: [{ type: EnemyTypes.BOSS_MIRROR, count: 1, delay: 0 }] },
     ],
     memoryCards: ['"you have to be over prepared"', '"pressure is privilege"', '"be perfect or be nothing"'],
