@@ -293,7 +293,6 @@ const Levels = [
     ],
     waves: [
       { spawns: [{ type: EnemyTypes.LIKE, count: 2, delay: 0.6 }, { type: EnemyTypes.COMMENT, count: 1, delay: 0.6 }] },
-      { spawns: [{ type: EnemyTypes.LIKE, count: 2, delay: 0.5 }, { type: EnemyTypes.RETWEET, count: 2, delay: 0.5 }, { type: EnemyTypes.COMMENT, count: 1, delay: 0.5 }] },
       { spawns: [{ type: EnemyTypes.LIKE, count: 3, delay: 0.4 }, { type: EnemyTypes.RETWEET, count: 2, delay: 0.4 }, { type: EnemyTypes.COMMENT, count: 2, delay: 0.4 }] },
       { spawns: [{ type: EnemyTypes.BOSS_MIRROR, count: 1, delay: 0 }] },
     ],
@@ -313,8 +312,7 @@ const Levels = [
     ],
     waves: [
       { spawns: [{ type: EnemyTypes.SPIDER, count: 8, delay: 0.15 }] },
-      { spawns: [{ type: EnemyTypes.SPIDER, count: 12, delay: 0.12 }] },
-      { spawns: [{ type: EnemyTypes.SPIDER, count: 15, delay: 0.1 }] },
+      { spawns: [{ type: EnemyTypes.SPIDER, count: 12, delay: 0.1 }] },
       { spawns: [{ type: EnemyTypes.BOSS_SPIDER, count: 1, delay: 0 }] },
     ],
     memoryCards: ['"can you get this done by tonight?"', '"just a quick call, five minutes"', '"sorry to bother you, but—"', '"you have 47 unread messages"'],
@@ -337,7 +335,6 @@ const Levels = [
     ],
     waves: [
       { spawns: [{ type: EnemyTypes.WATER_FLOW, count: 2, delay: 0.6 }] },
-      { spawns: [{ type: EnemyTypes.WATER_FLOW, count: 3, delay: 0.5 }] },
       { spawns: [{ type: EnemyTypes.WATER_FLOW, count: 3, delay: 0.4 }] },
       { spawns: [{ type: EnemyTypes.BOSS_PILLOW, count: 1, delay: 0 }] },
     ],
@@ -357,8 +354,7 @@ const Levels = [
     ],
     waves: [
       { spawns: [{ type: EnemyTypes.BAT, count: 6, delay: 0.3 }] },
-      { spawns: [{ type: EnemyTypes.BAT, count: 8, delay: 0.25 }] },
-      { spawns: [{ type: EnemyTypes.BAT, count: 10, delay: 0.2 }] },
+      { spawns: [{ type: EnemyTypes.BAT, count: 8, delay: 0.2 }] },
       { spawns: [{ type: EnemyTypes.BOSS_TIGER, count: 1, delay: 0 }] },
     ],
     memoryCards: ['"you\'ll regret this for the rest of your life"', '"no one is coming to help you"', '"you\'re not safe here"', '"one wrong move and it\'s over"'],
