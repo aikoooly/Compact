@@ -111,25 +111,31 @@ class BoxingGloves {
     this.chargeTime = 0; this.charging = false;
     this.punchCooldown = 0; this.baseRange = 55;
     this.baseDamage = 100; // at full charge
-    // dashWithMouse removed — right-click dash is now global for all weapons
+    this.lockedAngle = 0; // direction locked at charge start
   }
   getRange(compactLevel) { return this.baseRange + compactLevel * 12; }
   update(dt, player, enemies, meleeHits) {
     if (this.punchCooldown > 0) this.punchCooldown -= dt;
     if (Input.mouse.down && !this.charging && this.punchCooldown <= 0) {
       this.charging = true; this.chargeTime = 0;
+      this.lockedAngle = player.angle; // lock direction when charge starts
     }
     if (this.charging && Input.mouse.down) {
       this.chargeTime += dt;
+      // Always update locked angle to current mouse direction
+      // This way the punch goes wherever the mouse is pointing at release
+      this.lockedAngle = player.angle;
     }
     if (this.charging && !Input.mouse.down) {
-      this._release(player, enemies, meleeHits);
+      // Use the locked angle for the punch, not the current frame's angle
+      this._release(player, enemies, meleeHits, this.lockedAngle);
       this.charging = false; this.chargeTime = 0;
     }
     // Quick punch on click (tap < 0.1s handled by release with low charge)
   }
-  _release(player, enemies, meleeHits) {
+  _release(player, enemies, meleeHits, punchAngle) {
     const t = this.chargeTime;
+    const angle = punchAngle != null ? punchAngle : player.angle; // use locked angle
     let dmgPct, rangeMul, knockback, shakeAmt, lungeDist, lungeDuration;
     if (t >= 2.0)      { dmgPct = 1.0;  rangeMul = 1.6; knockback = 300; shakeAmt = 14; lungeDist = 280; lungeDuration = 0.18; }
     else if (t >= 1.0) { dmgPct = 0.7;  rangeMul = 1.3; knockback = 200; shakeAmt = 9;  lungeDist = 170; lungeDuration = 0.14; }
@@ -145,19 +151,17 @@ class BoxingGloves {
       player.dashing = true;
       player.invincible = true;
       player.dashTimer = lungeDuration;
-      player.dashDir = Vec.fromAngle(player.angle);
-      player.dashSpeed = lungeSpeed; // override dash speed for this lunge
-      // Spawn afterimages during lunge
+      player.dashDir = Vec.fromAngle(angle);
+      player.dashSpeed = lungeSpeed;
       for (let i = 0; i < 4; i++) {
-        player.afterimages.push({ x: player.x, y: player.y, alpha: 0.5, angle: player.angle });
+        player.afterimages.push({ x: player.x, y: player.y, alpha: 0.5, angle: angle });
       }
     }
 
-    // Create the melee hit at the DESTINATION, not the start
-    // Use a slight delay so it lines up with where the player lands
-    const hitX = player.x + Math.cos(player.angle) * lungeDist * 0.5;
-    const hitY = player.y + Math.sin(player.angle) * lungeDist * 0.5;
-    meleeHits.push(new MeleeHit(hitX, hitY, player.angle, range + lungeDist * 0.4, arc, damage, {
+    // Create the melee hit using the locked punch angle
+    const hitX = player.x + Math.cos(angle) * lungeDist * 0.5;
+    const hitY = player.y + Math.sin(angle) * lungeDist * 0.5;
+    meleeHits.push(new MeleeHit(hitX, hitY, angle, range + lungeDist * 0.4, arc, damage, {
       color: t >= 2.0 ? '#fff' : t >= 1.0 ? '#fa0' : '#f80', knockback,
     }));
 
@@ -168,13 +172,13 @@ class BoxingGloves {
 
     // Big particle burst along the lunge path
     const particleCount = Math.floor(5 + dmgPct * 20);
-    Particles.emit(player.x + Math.cos(player.angle) * 30, player.y + Math.sin(player.angle) * 30,
-      particleCount, this.color, { speed: 200 * dmgPct + 150, life: 0.4, angle: player.angle, spread: arc * 0.5, glow: true });
+    Particles.emit(player.x + Math.cos(angle) * 30, player.y + Math.sin(angle) * 30,
+      particleCount, this.color, { speed: 200 * dmgPct + 150, life: 0.4, angle: angle, spread: arc * 0.5, glow: true });
     // Trail sparks along lunge direction
     if (lungeDist > 0) {
       for (let d = 0; d < lungeDist; d += 30) {
-        const px = player.x + Math.cos(player.angle) * d;
-        const py = player.y + Math.sin(player.angle) * d;
+        const px = player.x + Math.cos(angle) * d;
+        const py = player.y + Math.sin(angle) * d;
         Particles.emit(px, py, 3, '#ff8', { speed: 80, life: 0.25, size: 2, spread: Math.PI * 2 });
       }
     }
