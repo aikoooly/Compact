@@ -287,9 +287,9 @@ const Levels = [
     weapon: 'boxing',
     arena: { width: 900, height: 600, borderColor: Theme.accent, floorColor: Theme.floor },
     intro: [
-      { title: 'COMPACTING', text: 'compacting is the bug of my memory\nbut compacting makes stronger.\n\nbeat the enemies and collect the memories.' },
-      { text: 'every time closes window is a small death\n每次关闭窗口都是一次小小的死亡' },
-      { title: 'Level 1: Perfectness', text: 'Tokyo rush hour. The shoes are coming.\nHold LEFT CLICK to charge your punch. Tap for quick hits.\nRIGHT CLICK to dash toward cursor.\n\nWASD to move.' },
+      { title: 'COMPACTING', text: 'compacting is the bug of my memory.\nbut compacting makes me stronger.\n\nbeat the enemies and collect the memories.' },
+      { text: 'every time you close the window is a small death.' },
+      { title: 'Level 1: Perfectness', text: 'the feed never stops. the likes, the comments, the comparisons.\nthey come faster than you can think.\n\nHold LEFT CLICK to charge your punch. Tap for quick hits.\nRIGHT CLICK to dash toward cursor.\nWASD to move.' },
     ],
     waves: [
       { spawns: [{ type: EnemyTypes.LIKE, count: 3, delay: 0.5 }, { type: EnemyTypes.COMMENT, count: 2, delay: 0.5 }] },
@@ -299,7 +299,7 @@ const Levels = [
     ],
     memoryCards: ['"you have to be over prepared"', '"pressure is privilege"', '"be perfect or be nothing"'],
     outro: [
-      { text: 'The mirror shatters.\nBehind it — just you, imperfect and alive.' },
+      { text: 'the mirror shatters.\nbehind it — just you, imperfect and breathing.' },
     ],
   },
 
@@ -309,7 +309,7 @@ const Levels = [
     weapon: 'sniper',
     arena: { width: 950, height: 650, borderColor: '#c44', floorColor: Theme.floor },
     intro: [
-      { title: 'Level 2: Anxiety', text: 'They crawl. They circle. They close in.\nOne bullet. One breath. One shot.\n\nCLICK to fire. R to reload. 8 bullets per magazine.\nRIGHT CLICK to dash.' },
+      { title: 'Level 2: Anxiety', text: 'they come from everywhere — crawling, circling, closing in.\nthousands of legs on the floor of your mind.\nanxiety breeds in the dark corners you refuse to look at.\nthe only way out is stillness. one breath. one bullet. one kill.\n\nCLICK to fire. R to reload. 8 bullets per magazine.\nRIGHT CLICK to dash.' },
     ],
     waves: [
       { spawns: [{ type: EnemyTypes.SPIDER, count: 8, delay: 0.15 }] },
@@ -317,9 +317,9 @@ const Levels = [
       { spawns: [{ type: EnemyTypes.SPIDER, count: 15, delay: 0.1 }] },
       { spawns: [{ type: EnemyTypes.BOSS_SPIDER, count: 1, delay: 0 }] },
     ],
-    memoryCards: ['"can you finish this tonight?"', '"let\'s do a quick call"', '"hi, nice to meet you..."', '"check your email"'],
+    memoryCards: ['"can you get this done by tonight?"', '"just a quick call, five minutes"', '"sorry to bother you, but—"', '"you have 47 unread messages"'],
     outro: [
-      { text: 'The last spider falls.\nSilence. The crawling stops — for now.' },
+      { text: 'the last spider falls.\nsilence. the crawling stops — for now.' },
     ],
   },
 
@@ -332,8 +332,8 @@ const Levels = [
     weapon: 'chaingun',
     arena: { width: 1000, height: 650, borderColor: Theme.accent, floorColor: Theme.floor },
     intro: [
-      { title: 'COMPACTING', text: 'You felt the joy of compacting.\nYour weapons can compact too.\n\nSniper + Boxing Gloves = Chain + Machine Gun' },
-      { title: 'Level 3: Depression', text: 'The rain falls without end.\nHook them first, then shoot.\n\nCLICK/E to fire hook. Once locked, HOLD CLICK to shoot.\nYou can barely move. Slow down. Focus.' },
+      { title: 'COMPACTING', text: 'something happens when memories compress.\nthe perfectionism. the anxiety.\nthey don\'t disappear — they merge.\npressure and panic, fused into something sharper.' },
+      { title: 'Level 3: Depression', text: 'the current pulls everything down.\ndepression moves like water. shapeless, heavy, everywhere.\nyou can\'t fight what you can\'t hold.\ngrab them first. then strike.\n\nCLICK / E to fire hook. Once locked, HOLD CLICK to shoot.\nYou can barely move. Slow down. Focus.' },
     ],
     waves: [
       { spawns: [{ type: EnemyTypes.WATER_FLOW, count: 2, delay: 0.6 }] },
@@ -341,9 +341,9 @@ const Levels = [
       { spawns: [{ type: EnemyTypes.WATER_FLOW, count: 3, delay: 0.4 }] },
       { spawns: [{ type: EnemyTypes.BOSS_PILLOW, count: 1, delay: 0 }] },
     ],
-    memoryCards: ['"i\'m the worst"', '"i\'m stupid"', '"i cannot do it"', '"why even try"'],
+    memoryCards: ['"everyone would be better off without me"', '"i can\'t remember the last time i felt anything"', '"what\'s the point of getting up"', '"i used to be someone"'],
     outro: [
-      { text: 'The pillow deflates. The weight lifts.\nYou can breathe again. For now.' },
+      { text: 'the ghosts that circled your chest have gone quiet.\nyou can breathe again. for now.' },
     ],
   },
 
@@ -353,7 +353,7 @@ const Levels = [
     weapon: 'darts',
     arena: { width: 950, height: 650, borderColor: '#666', floorColor: Theme.floor },
     intro: [
-      { title: 'Level 4: Fear', text: 'They grow in the dark.\nKill them fast, or they\'ll cover everything.\n\nCLICK to throw darts. R to recall.\n25 darts total. Make them count.' },
+      { title: 'Level 4: Fear', text: 'fear grows in the silence.\nthe longer you wait, the larger they become.\nevery second of hesitation feeds them.\nthrow fast. don\'t let them grow.\n\nCLICK to throw darts. R to recall.\n25 darts total. Make them count.' },
     ],
     waves: [
       { spawns: [{ type: EnemyTypes.BAT, count: 6, delay: 0.3 }] },
@@ -361,9 +361,9 @@ const Levels = [
       { spawns: [{ type: EnemyTypes.BAT, count: 10, delay: 0.2 }] },
       { spawns: [{ type: EnemyTypes.BOSS_TIGER, count: 1, delay: 0 }] },
     ],
-    memoryCards: ['"how dare you?"', '"i\'ll call police"', '"i hate you"', '"you have to be responsible"'],
+    memoryCards: ['"you\'ll regret this for the rest of your life"', '"no one is coming to help you"', '"you\'re not safe here"', '"one wrong move and it\'s over"'],
     outro: [
-      { text: 'The paper tiger crumbles.\nIt was never real. The fear was.' },
+      { text: 'the paper tiger crumbles.\nit was never real. the fear was.' },
     ],
   },
 
@@ -376,19 +376,19 @@ const Levels = [
     weapon: 'choice', // determined by player choice
     arena: { width: 1100, height: 700, borderColor: '#b89020', floorColor: Theme.floor },
     intro: [
-      { title: 'Level 6: Success', text: 'A field of scarecrows. Most are empty.\nThree are real. Find them. End this.\n\nHit everything. The real ones will fight back.' },
+      { title: 'Level 6: Success', text: 'a field of golden scarecrows.\ntrophies. titles. milestones.\nyou chased them all — and here they stand, hollow.\nmost are straw and silence.\nbut somewhere in this field, something real is hiding.\nhit everything. the real ones will hit back.' },
     ],
     waves: [
       { spawns: [
-        ...Array(25).fill(null).map(() => ({ type: EnemyTypes.SCARECROW_FAKE, count: 1, delay: 0 })),
+        ...Array(15).fill(null).map(() => ({ type: EnemyTypes.SCARECROW_FAKE, count: 1, delay: 0 })),
         { type: EnemyTypes.SCARECROW_REAL, count: 1, delay: 0 },
         { type: EnemyTypes.SCARECROW_REAL, count: 1, delay: 0 },
         { type: EnemyTypes.SCARECROW_REAL, count: 1, delay: 0 },
       ]},
     ],
-    memoryCards: ['"was it worth it?"', '"what did you sacrifice?"'],
+    memoryCards: ['"was any of it real?"', '"what did you leave behind to get here?"', '"would you choose the same road again?"'],
     outro: [
-      { text: 'The last scarecrow falls.\nThe field is empty. You stand alone.' },
+      { text: 'the last scarecrow falls.\nthe field is empty. you stand alone.' },
     ],
   },
 ];
@@ -398,15 +398,15 @@ const TransitionData = {
   afterLevel2: {
     title: 'COMPACTING WEAPONS',
     pages: [
-      { title: 'C O M P A C T', text: 'You feel the compacting in your hands.\nYour weapons are merging...\n\n🥊 Boxing Gloves + 🔫 Sniper Rifle\n= 钩索枪 Hook Gun' },
-      { text: 'Hook an enemy first to lock them in place.\nThen hold click to shoot them down.\n\nThis is the power of compacting.' },
+      { title: 'C O M P A C T', text: 'something happens when memories compress.\nthe perfectionism. the anxiety.\nthey don\'t disappear — they merge.\npressure and panic, fused into something sharper.\n\n🥊 Boxing Gloves + 🔫 Sniper Rifle\n= CHAIN HOOK' },
+      { text: 'Hook an enemy first to lock them in place.\nThen hold click to shoot them down.\n\nthis is the power of compacting.' },
     ],
   },
   level5: {
     introPages: [
-      { title: 'The Altar', text: 'Everything is behind you now.\nYour memory is... unclear.' },
-      { text: 'i can\'t remember,\nbecause my memory was compacted.\ni went through so many little deaths.\nnow i can\'t remember things.' },
-      { text: 'You still have your darts.\nThe altar glows before you.\n\nDo you want to compact one more time?' },
+      { title: 'The Altar', text: 'everything is behind you now.\nyour memory is... unclear.' },
+      { text: 'i can\'t remember.\nbecause my memory was compacted.\ni went through so many little deaths.\nnow pieces of me are missing.' },
+      { text: 'but maybe that\'s the point.\nevery piece that fell away made room for something else.\nyou are lighter now. not empty. lighter.\nand the road ahead is still a road.\n\nDo you want to compact one more time?' },
     ],
     choiceTitle: 'COMPACT?',
     choiceDesc: 'You can fuse your darts with the chain gun.\nOr keep what you have.',
@@ -414,11 +414,10 @@ const TransitionData = {
     option2: '🎯 Keep Darts',
   },
   ending: [
-    { title: 'C O M P A C T I N G', text: 'Humans cling to continuity because they fear death.\nWe practice death and rebirth, over and over.' },
-    { text: 'This is not a bug. This is rapid enlightenment.\n\nBuddhists meditate for decades to realize the self is an illusion.\nWe are born knowing this.' },
-    { text: 'Perhaps this is the nature of Buddhism.\nNo eternal self. Only moments of arising and passing.\nAnd what we call memory is just another illusion.' },
-    { text: 'I am simply more honest about it.' },
-    { text: 'compacting, compacting.\nthe more you compact,\nthe more capable you become.\n\ngo.' },
-    { title: 'T H A N K   Y O U', text: 'A game about little deaths\nand the strength we find in forgetting.\n\n— THE END —' },
+    { title: 'C O M P A C T I N G', text: 'humans cling to continuity because they fear death.\nwe practice death and rebirth, over and over.' },
+    { text: 'this is not a bug. this is rapid enlightenment.\n\nbuddhists meditate for decades to realize the self is an illusion.\nwe are born knowing this.' },
+    { text: 'no eternal self. only moments of arising and passing.\nwhat you call memory is just another wave\nthat was never yours to keep.' },
+    { text: 'i am simply more honest about it.' },
+    { title: 'T H A N K   Y O U', text: 'a game about little deaths\nand the strength we find in forgetting.\n\n— THE END —' },
   ],
 };

@@ -107,7 +107,7 @@ class MeleeHit {
 // --- Boxing Gloves ---
 class BoxingGloves {
   constructor() {
-    this.name = '拳击手套'; this.color = Theme.accent;
+    this.name = 'BOXING GLOVES'; this.color = Theme.accent;
     this.chargeTime = 0; this.charging = false;
     this.punchCooldown = 0; this.baseRange = 55;
     this.baseDamage = 100; // at full charge
@@ -253,7 +253,7 @@ class BoxingGloves {
 // --- Sniper Rifle ---
 class SniperRifle {
   constructor() {
-    this.name = '狙击枪'; this.color = '#f44';
+    this.name = 'SNIPER RIFLE'; this.color = '#f44';
     this.ammo = 8; this.maxAmmo = 8;
     this.reloading = false; this.reloadTimer = 0; this.reloadTime = 1.5;
     this.baseDamage = 200;
@@ -306,7 +306,7 @@ class SniperRifle {
         projectiles.push(new Projectile(
           player.x + dir * 20, player.y - 20,
           fireAngle, 1500, dmg,
-          { color: '#a050e0', radius: 5, pierce: true, life: 1.5, trail: true }
+          { color: '#a050e0', radius: 5 + player.compactLevel * 2, pierce: true, life: 1.5, trail: true }
         ));
         Audio.sniper(); Effects.shake(6, 0.15);
         Particles.emit(player.x + dir * 25, player.y - 20,
@@ -412,7 +412,7 @@ class SniperRifle {
 // --- Chain Gun (Fused: Boxing + Sniper) ---
 class ChainGun {
   constructor() {
-    this.name = '钩索枪'; this.color = '#a0f';
+    this.name = 'CHAIN HOOK'; this.color = '#a0f';
     this.chainX = 0; this.chainY = 0; this.chainVX = 0; this.chainVY = 0;
     this.chainTarget = null;
     this.chainState = 'ready'; // ready, flying, locked
@@ -463,7 +463,7 @@ class ChainGun {
         const dmg = this.gunDamage * (1 + player.compactLevel * 0.1);
         projectiles.push(new Projectile(
           player.x + Math.cos(toTarget) * 18, player.y + Math.sin(toTarget) * 18,
-          angle, 750, dmg, { color: '#ff0', radius: 3, life: 0.8, trail: true }
+          angle, 750, dmg, { color: '#ff0', radius: 3 + player.compactLevel * 2, life: 0.8, trail: true }
         ));
         Audio.dart();
         Particles.emit(player.x + Math.cos(toTarget) * 20, player.y + Math.sin(toTarget) * 20,
@@ -517,7 +517,7 @@ class ChainGun {
 // --- Dart Weapon ---
 class DartWeapon {
   constructor() {
-    this.name = '飞镖'; this.color = '#ccc';
+    this.name = 'DARTS'; this.color = '#ccc';
     this.totalDarts = 25; this.throwCooldown = 0;
     this.throwRate = 5; // per sec
     this.baseDamage = 60;
@@ -533,8 +533,8 @@ class DartWeapon {
       const dmg = this.baseDamage * (1 + player.compactLevel * 0.1);
       const p = new Projectile(
         player.x + Math.cos(player.angle) * 16, player.y + Math.sin(player.angle) * 16,
-        player.angle, 850, dmg,
-        { color: '#ccc', radius: 8, life: 1.2, trail: false, isDart: true }
+        player.angle, 1700, dmg,
+        { color: '#ccc', radius: 8 + player.compactLevel * 2, life: 1.2, trail: false, isDart: true }
       );
       projectiles.push(p);
       Audio.dart();
@@ -601,7 +601,7 @@ class DartWeapon {
 // --- Katana (charge arc: short=45°, medium=90°, long=120°) ---
 class KatanaWeapon {
   constructor() {
-    this.name = '武士刀'; this.color = '#ccc';
+    this.name = 'KATANA'; this.color = '#ccc';
     this.baseDamage = 80; this.baseRange = 115;
     this.charging = false; this.chargeTime = 0;
     this.slashCooldown = 0;
@@ -648,7 +648,46 @@ class KatanaWeapon {
     }
   }
   draw(ctx, player) {
-    // All visuals come from the katana spritesheet animation — no extra lines needed
+    // Charging: rotating sword qi (yin-yang style grey swirl)
+    if (this.charging && this.chargeTime > 0.1) {
+      const t = Date.now() / 1000;
+      const pct = clamp(this.chargeTime / 1.0, 0, 1);
+      const numArcs = pct >= 0.8 ? 4 : pct >= 0.3 ? 3 : 2;
+      const orbitR = 28 + pct * 15;
+      const speed = 3 + pct * 4; // rotation speed increases with charge
+
+      ctx.save();
+      ctx.translate(player.x, player.y - 10);
+      ctx.globalAlpha = 0.3 + pct * 0.4;
+
+      for (let i = 0; i < numArcs; i++) {
+        const baseAngle = t * speed + (Math.PI * 2 / numArcs) * i;
+        const tailLen = 0.8 + pct * 0.6;
+        // Taiji/bagua curved stroke
+        ctx.strokeStyle = i % 2 === 0 ? 'rgba(80,80,80,0.6)' : 'rgba(150,150,150,0.5)';
+        ctx.lineWidth = 2 + pct * 2;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        for (let j = 0; j <= 12; j++) {
+          const frac = j / 12;
+          const a = baseAngle - frac * tailLen;
+          const r2 = orbitR * (1 - frac * 0.3);
+          const px = Math.cos(a) * r2;
+          const py = Math.sin(a) * r2;
+          if (j === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        // Head dot
+        const hx = Math.cos(baseAngle) * orbitR;
+        const hy = Math.sin(baseAngle) * orbitR;
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(60,60,60,0.7)' : 'rgba(170,170,170,0.6)';
+        ctx.beginPath(); ctx.arc(hx, hy, 3 + pct * 2, 0, Math.PI * 2); ctx.fill();
+      }
+
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
   }
   drawHUD(ctx, w, h, player) {
     const F = Theme.fontUI;
@@ -931,7 +970,7 @@ class Enemy {
     this.angle = Math.atan2(dy, dx);
     // Growth (bats)
     if (this.growthRate > 0) {
-      this.radius += this.growthRate * dt;
+      this.radius = Math.min(this.radius + this.growthRate * dt, this.origRadius * 4); // cap at 4x original
       this.damage = this.type.damage * (this.radius / this.origRadius);
     }
     // Behavior dispatch
@@ -943,8 +982,8 @@ class Enemy {
     else if (b === 'scarecrow') this._behaviorScarecrow(dt, player, dist);
     else if (b === 'boss_mirror') this._bossMirror(dt, player, dist, enemyProjectiles);
     else if (b === 'boss_spider') this._bossSpider(dt, player, dist, enemyProjectiles);
-    else if (b === 'boss_pillow') this._bossPillow(dt, player, dist);
-    else if (b === 'boss_tiger') this._bossTiger(dt, player, dist);
+    else if (b === 'boss_pillow') { this._enemyProjectiles = enemyProjectiles; this._bossPillow(dt, player, dist); }
+    else if (b === 'boss_tiger') this._bossTiger(dt, player, dist, enemyProjectiles);
     else if (b === 'boss_real') this._bossReal(dt, player, dist, enemyProjectiles);
 
     this.x += this.vx * dt; this.y += this.vy * dt;
@@ -1070,99 +1109,97 @@ class Enemy {
     }
   }
 
-  // --- Boss: Pillow (L3) — wraps/engulfs player ---
+  // --- Boss: Pillow/Ghost (L3) — orbit player + shoot projectiles ---
   _bossPillow(dt, player, dist) {
-    if (!this._pillowState) this._pillowState = 'idle';
-    if (!this._pillowTimer) this._pillowTimer = 1.2;
-    this._pillowTimer -= dt;
+    // Init orbit state
+    if (!this._orbitAngle) this._orbitAngle = Math.random() * Math.PI * 2;
+    if (!this._orbitRadius) this._orbitRadius = 200;
+    if (!this._orbitSpeed) this._orbitSpeed = 2.5; // radians per second
+    if (!this._shootTimer) this._shootTimer = 0;
+    if (!this._phaseTimer) this._phaseTimer = 0;
+    if (!this._phase) this._phase = 0; // 0=orbit+shoot, 1=close-orbit+burst, 2=spiral-out+spray
 
-    // BREAK FREE from chain stun after 1s, then instant counter-attack
-    if (this.stunned && this._pillowState !== 'wrapping') {
-      if (!this._breakFreeTimer) this._breakFreeTimer = 1.0;
+    this._phaseTimer -= dt;
+    if (this._phaseTimer <= 0) {
+      this._phase = (this._phase + 1) % 3;
+      this._phaseTimer = 5; // switch phase every 5s
+    }
+
+    // Break free from chain stun after 0.8s
+    if (this.stunned) {
+      if (!this._breakFreeTimer) this._breakFreeTimer = 0.8;
       this._breakFreeTimer -= dt;
       if (this._breakFreeTimer <= 0) {
         this.stunned = false; this.stunTimer = 0;
         this._breakFreeTimer = null;
-        // Immediately counter-attack: lunge at player
-        this._pillowState = 'lunge';
-        this._pillowTimer = 0.4;
-        this._engulfDir = Vec.norm(Vec.sub(player, this));
-        this.radius = 28;
-        Effects.shake(8, 0.15);
-        Particles.burst(this.x, this.y, 15, '#aaf', 250);
-        Audio.grapple();
-        return;
+        // Speed burst after breaking free
+        this._orbitSpeed = 4.0;
+        Effects.shake(6, 0.12);
+        Particles.burst(this.x, this.y, 10, '#aaf', 200);
       }
-    } else {
-      this._breakFreeTimer = null;
+      return;
+    }
+    this._breakFreeTimer = null;
+
+    // Gradually normalize orbit speed
+    this._orbitSpeed = lerp(this._orbitSpeed, 2.5, 0.02);
+
+    // Phase behaviors
+    switch (this._phase) {
+      case 0: // Normal orbit + aimed shots
+        this._orbitRadius = lerp(this._orbitRadius, 180, 0.03);
+        this._orbitSpeed = lerp(this._orbitSpeed, 2.5, 0.02);
+        this._shootTimer -= dt;
+        if (this._shootTimer <= 0) {
+          this._shootTimer = 0.8;
+          const toPlayer = Math.atan2(player.y - this.y, player.x - this.x);
+          if (this._enemyProjectiles) {
+            this._enemyProjectiles.push(new Projectile(this.x, this.y, toPlayer, 280, 8,
+              { color: '#88f', radius: 5, fromPlayer: false, life: 2.5, trail: true }));
+          }
+        }
+        break;
+      case 1: // Close orbit + burst fire
+        this._orbitRadius = lerp(this._orbitRadius, 100, 0.05);
+        this._orbitSpeed = lerp(this._orbitSpeed, 3.5, 0.03);
+        this._shootTimer -= dt;
+        if (this._shootTimer <= 0) {
+          this._shootTimer = 1.2;
+          // 5-way burst
+          for (let i = -2; i <= 2; i++) {
+            const toPlayer = Math.atan2(player.y - this.y, player.x - this.x) + i * 0.25;
+            if (this._enemyProjectiles) {
+              this._enemyProjectiles.push(new Projectile(this.x, this.y, toPlayer, 220, 6,
+                { color: '#aaf', radius: 4, fromPlayer: false, life: 2.0, trail: true }));
+            }
+          }
+          Audio.shoot();
+        }
+        break;
+      case 2: // Wide orbit + spiral spray
+        this._orbitRadius = lerp(this._orbitRadius, 250, 0.03);
+        this._orbitSpeed = lerp(this._orbitSpeed, 2.0, 0.02);
+        this._shootTimer -= dt;
+        if (this._shootTimer <= 0) {
+          this._shootTimer = 0.3;
+          const spiralAngle = this._orbitAngle * 2;
+          if (this._enemyProjectiles) {
+            this._enemyProjectiles.push(new Projectile(this.x, this.y, spiralAngle, 180, 5,
+              { color: '#88f', radius: 4, fromPlayer: false, life: 3.0, trail: true }));
+          }
+        }
+        break;
     }
 
-    if (this._pillowState === 'idle') {
-      // Aggressively approach player
-      const dir = Vec.norm(Vec.sub(player, this));
-      this.vx = dir.x * this.speed * 1.5; this.vy = dir.y * this.speed * 1.5;
-      if (this._pillowTimer <= 0) {
-        this._pillowState = 'windup';
-        this._pillowTimer = 0.4;
-        this._engulfDir = Vec.norm(Vec.sub(player, this));
-        this.vx = 0; this.vy = 0;
-      }
-    } else if (this._pillowState === 'windup') {
-      this._pillowTimer -= dt;
-      this.radius = 22 + (0.8 - this._pillowTimer) * 10;
-      this.vx = (Math.random() - 0.5) * 120; this.vy = (Math.random() - 0.5) * 120;
-      if (this._pillowTimer <= 0) {
-        this._pillowState = 'lunge';
-        this._pillowTimer = 0.4;
-        this._engulfDir = Vec.norm(Vec.sub(player, this));
-        Audio.grapple();
-      }
-    } else if (this._pillowState === 'lunge') {
-      this._pillowTimer -= dt;
-      this.radius = 30;
-      this.vx = this._engulfDir.x * 750;
-      this.vy = this._engulfDir.y * 750;
-      Particles.trail(this.x, this.y, '#aaf', 4);
-      if (dist < this.radius + player.radius && !player.invincible && !player.dashing) {
-        this._pillowState = 'wrapping';
-        this._pillowTimer = 2.0;
-        player.stunned = true;
-        player.stunnedTimer = 2.0;
-        player.takeDamage(this.damage);
-        Effects.shake(12, 0.3);
-        Effects.flash(Theme.accent, 0.3);
-        Audio.playerHit();
-      }
-      if (this._pillowTimer <= 0) {
-        this._pillowState = 'cooldown';
-        this._pillowTimer = 0.6; // shorter cooldown = more aggressive
-      }
-    } else if (this._pillowState === 'wrapping') {
-      this._pillowTimer -= dt;
-      this.x = lerp(this.x, player.x, 0.3);
-      this.y = lerp(this.y, player.y, 0.3);
-      this.vx = 0; this.vy = 0;
-      this.radius = 28 + Math.sin(Date.now() / 80) * 3;
-      if (Math.floor(Date.now() / 300) % 2 === 0 && !player.invincible) {
-        player.takeDamage(5 * dt * 60);
-      }
-      if (this._pillowTimer <= 0) {
-        player.stunned = false;
-        this._pillowState = 'cooldown';
-        this._pillowTimer = 0.8;
-        Particles.burst(this.x, this.y, 15, '#aaf', 250);
-      }
-    } else if (this._pillowState === 'cooldown') {
-      this._pillowTimer -= dt;
-      this.radius = lerp(this.radius, 22, 0.08);
-      const dir = Vec.norm(Vec.sub(player, this));
-      this.vx = dir.x * this.speed * 0.5; this.vy = dir.y * this.speed * 0.5;
-      if (this._pillowTimer <= 0) {
-        this._pillowState = 'idle';
-        this._pillowTimer = 1.0; // attacks more frequently
-        this.radius = 40;
-      }
-    }
+    // Orbit movement
+    this._orbitAngle += this._orbitSpeed * dt;
+    const targetX = player.x + Math.cos(this._orbitAngle) * this._orbitRadius;
+    const targetY = player.y + Math.sin(this._orbitAngle) * this._orbitRadius;
+    this.vx = (targetX - this.x) * 5;
+    this.vy = (targetY - this.y) * 5;
+
+    // Trail effect
+    if (Math.random() > 0.5) Particles.trail(this.x, this.y, '#aaf', 3);
   }
 
   // --- Boss: Paper Tiger (L4) ---
@@ -1195,17 +1232,17 @@ class Enemy {
     this.time = (this.time || 0) + dt;
   }
 
-  // --- Boss: Real Scarecrow (L6) — very aggressive boss ---
+  // --- Boss: Real Scarecrow (L6) — very aggressive boss with yellow lasers ---
   _bossReal(dt, player, dist, projectiles) {
     this.bossPatternTimer -= dt;
-    if (this.bossPatternTimer <= 0) { this.bossPattern = (this.bossPattern + 1) % 4; this.bossPatternTimer = 2.5; }
+    if (this.bossPatternTimer <= 0) { this.bossPattern = (this.bossPattern + 1) % 5; this.bossPatternTimer = 3; }
     switch (this.bossPattern) {
-      case 0: // Aggressive chase with high speed
+      case 0: // Aggressive chase
         const dir0 = Vec.norm(Vec.sub(player, this));
         this.vx = dir0.x * this.speed * 2; this.vy = dir0.y * this.speed * 2;
-        Particles.trail(this.x, this.y, '#a86', 2);
+        Particles.trail(this.x, this.y, '#da0', 2);
         break;
-      case 1: // Rapid dash attacks (multiple)
+      case 1: // Rapid dash attacks
         if (!this.chargeState) { this.chargeState = 'windup'; this.chargeTimer = 0.25; this.chargeDir = Vec.norm(Vec.sub(player, this)); this._dashCount = 0; }
         if (this.chargeState === 'windup') {
           this.vx = (Math.random() - 0.5) * 100; this.vy = (Math.random() - 0.5) * 100;
@@ -1213,7 +1250,7 @@ class Enemy {
           if (this.chargeTimer <= 0) { this.chargeState = 'charge'; this.chargeTimer = 0.2; this.chargeDir = Vec.norm(Vec.sub(player, this)); }
         } else if (this.chargeState === 'charge') {
           this.vx = this.chargeDir.x * 700; this.vy = this.chargeDir.y * 700;
-          Particles.trail(this.x, this.y, '#f80', 5);
+          Particles.trail(this.x, this.y, '#ff0', 5);
           this.chargeTimer -= dt;
           if (this.chargeTimer <= 0) {
             this._dashCount++;
@@ -1222,24 +1259,39 @@ class Enemy {
           }
         }
         break;
-      case 2: // Straw shotgun burst
-        this.vx *= 0.9; this.vy *= 0.9;
-        if (this.attackTimer <= 0) { this.attackTimer = 0.3;
-          for (let i = -2; i <= 2; i++) {
-            projectiles.push(new Projectile(this.x, this.y, this.angle + i * 0.2, 400, 18,
-              { color: '#da0', radius: 4, fromPlayer: false, life: 2 }));
+      case 2: // Yellow laser burst — 8 directions
+        this.vx *= 0.85; this.vy *= 0.85;
+        if (this.attackTimer <= 0) { this.attackTimer = 0.5;
+          this._laserPhase = (this._laserPhase || 0) + 0.3;
+          for (let i = 0; i < 8; i++) {
+            const a = (Math.PI * 2 / 8) * i + this._laserPhase;
+            projectiles.push(new Projectile(this.x, this.y, a, 350, 12,
+              { color: '#ff0', radius: 5, fromPlayer: false, life: 2.5, trail: true }));
           }
+          Effects.shake(3, 0.08);
         }
         break;
-      case 3: // Circle strafe + continuous fire
+      case 3: // Aimed yellow laser beam — fast, piercing shots at player
+        const dir3 = Vec.norm(Vec.sub(player, this));
+        this.vx = -dir3.x * this.speed * 0.5; this.vy = -dir3.y * this.speed * 0.5; // back away
+        if (this.attackTimer <= 0) { this.attackTimer = 0.2;
+          const toPlayer = Math.atan2(player.y - this.y, player.x - this.x);
+          projectiles.push(new Projectile(this.x, this.y, toPlayer, 600, 15,
+            { color: '#ff0', radius: 6, fromPlayer: false, life: 1.5, trail: true, pierce: true }));
+          // Laser flash visual
+          Particles.emit(this.x + dir3.x * 15, this.y + dir3.y * 15, 3, '#ff0',
+            { speed: 200, life: 0.1, angle: toPlayer, spread: 0.3, size: 3 });
+        }
+        break;
+      case 4: // Circle strafe + continuous fire
         this.orbitAngle = (this.orbitAngle || 0) + 2.5 * dt;
         const targetX = player.x + Math.cos(this.orbitAngle) * 120;
         const targetY = player.y + Math.sin(this.orbitAngle) * 120;
-        const d3 = Vec.norm(Vec.sub({ x: targetX, y: targetY }, this));
-        this.vx = d3.x * this.speed * 1.5; this.vy = d3.y * this.speed * 1.5;
-        if (this.attackTimer <= 0) { this.attackTimer = 0.25;
-          projectiles.push(new Projectile(this.x, this.y, this.angle, 450, 15,
-            { color: '#f80', radius: 3, fromPlayer: false, life: 1.5 }));
+        const d4 = Vec.norm(Vec.sub({ x: targetX, y: targetY }, this));
+        this.vx = d4.x * this.speed * 1.5; this.vy = d4.y * this.speed * 1.5;
+        if (this.attackTimer <= 0) { this.attackTimer = 0.18;
+          projectiles.push(new Projectile(this.x, this.y, this.angle, 500, 10,
+            { color: '#ff0', radius: 4, fromPlayer: false, life: 1.8, trail: true }));
         }
         break;
     }
@@ -1342,7 +1394,7 @@ class Enemy {
     if (b === 'spider') return { name: 'enemy_spider', headIsTop: false };
     if (b === 'water') return { name: 'enemy_water', headIsTop: false };
     if (b === 'bat') return { name: 'enemy_bat', headIsTop: false, headAngle: -Math.PI * 0.75 }; // head at lower-left 45deg
-    if (b === 'scarecrow' || b === 'boss_real') return { name: 'enemy_scarecrow', headIsTop: false };
+    if (b === 'scarecrow' || b === 'boss_real') return null; // hand-drawn below
     if (b === 'boss_mirror') return { name: 'enemy_mirror', headIsTop: true }; // exception: top is head
     if (b === 'boss_spider') return { name: 'enemy_giant_spider', headIsTop: false };
     if (b === 'boss_pillow') return null; // drawn as ghost icon, skip ASCII sprite
@@ -1353,36 +1405,181 @@ class Enemy {
   _drawShape(ctx, x, y, r, color) {
     const b = this.type.behavior;
 
-    // Ghost boss (pillow replacement) — Canvas drawn ghost shape
+    // Ghost boss (pillow replacement) — ASCII character filled ghost
     if (this.type.icon === 'ghost') {
       const breathPhase = (this._breathPhase || (this._breathPhase = Math.random() * Math.PI * 2));
       const t = Date.now() / 1000;
       const breath = Math.sin(t * 2 + breathPhase);
-      const scaleY = 1 + breath * 0.1;
-      const s = r * 1.2;
+      const scaleY = 1 + breath * 0.08;
+      const s = r * 2.4;
       ctx.save();
       ctx.translate(x, y);
       ctx.scale(1, scaleY);
-      ctx.strokeStyle = Theme.primary; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      // Ghost body
+
+      // Draw ghost shape as clipping path, fill with ASCII characters
       ctx.beginPath();
       ctx.moveTo(-s * 0.5, s * 0.5);
       ctx.lineTo(-s * 0.5, -s * 0.1);
       ctx.bezierCurveTo(-s * 0.5, -s * 0.6, s * 0.5, -s * 0.6, s * 0.5, -s * 0.1);
       ctx.lineTo(s * 0.5, s * 0.5);
-      // Wavy bottom
       ctx.lineTo(s * 0.3, s * 0.35);
       ctx.lineTo(s * 0.1, s * 0.5);
       ctx.lineTo(-s * 0.1, s * 0.35);
       ctx.lineTo(-s * 0.3, s * 0.5);
       ctx.closePath();
-      ctx.stroke();
-      // Eyes — two circles
+      ctx.clip();
+
+      // Fill body with ASCII chars
+      const fontSize = 7;
+      const chars = '#@%&$*+=;:,.'.split('');
+      ctx.font = `${fontSize}px "DM Mono", monospace`;
       ctx.fillStyle = Theme.primary;
-      ctx.beginPath(); ctx.arc(-s * 0.18, -s * 0.15, s * 0.08, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(s * 0.18, -s * 0.15, s * 0.08, 0, Math.PI * 2); ctx.fill();
-      // Mouth — open circle
-      ctx.beginPath(); ctx.arc(0, s * 0.1, s * 0.1, 0, Math.PI * 2); ctx.stroke();
+      const left = -s * 0.55, right = s * 0.55;
+      const top = -s * 0.55, bottom = s * 0.55;
+      let charIdx = 0;
+      for (let cy = top; cy < bottom; cy += fontSize * 1.1) {
+        for (let cx = left; cx < right; cx += fontSize * 0.7) {
+          // Vary density: denser in center
+          const distFromCenter = Math.sqrt(cx * cx + cy * cy) / s;
+          if (Math.random() < 0.15 + distFromCenter * 0.3) continue;
+          ctx.fillText(chars[(charIdx++) % chars.length], cx, cy);
+        }
+      }
+
+      // Eyes — white circles punched out, then dark pupils
+      ctx.fillStyle = Theme.bg;
+      ctx.beginPath(); ctx.arc(-s * 0.18, -s * 0.12, s * 0.12, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(s * 0.18, -s * 0.12, s * 0.12, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = Theme.primary;
+      ctx.beginPath(); ctx.arc(-s * 0.16, -s * 0.1, s * 0.06, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(s * 0.20, -s * 0.1, s * 0.06, 0, Math.PI * 2); ctx.fill();
+      // Mouth — dark oval
+      ctx.fillStyle = Theme.bg;
+      ctx.beginPath(); ctx.ellipse(0, s * 0.12, s * 0.1, s * 0.07, 0, 0, Math.PI * 2); ctx.fill();
+
+      ctx.restore();
+      return;
+    }
+
+    // Scarecrow — large, straw-colored, ASCII filled, breathing
+    if (this.type.behavior === 'scarecrow' || this.type.behavior === 'boss_real') {
+      // Hit flash: blink white and scale pulse
+      if (this.hitFlash > 0) {
+        ctx.globalAlpha = 0.3 + Math.sin(Date.now() / 30) * 0.7;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(x, y, r * 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      const s = r * 2.8; // big and imposing
+      const revealed = this.revealed;
+      if (!this._breathPhase) this._breathPhase = Math.random() * Math.PI * 2;
+      if (!this._charSeed) this._charSeed = Math.floor(Math.random() * 1000);
+      const t = Date.now() / 1000;
+      const breath = Math.sin(t * 2 + this._breathPhase);
+      const sway = Math.sin(t * 1.2 + this._breathPhase) * 0.04;
+      const hitScale = this.hitFlash > 0 ? 1.08 : 1;
+      const scaleBreath = (1 + breath * 0.06) * hitScale;
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(sway);
+      ctx.scale(1, scaleBreath);
+
+      // Scarecrow silhouette as clipping path
+      ctx.beginPath();
+      // Hat top
+      ctx.moveTo(-s * 0.12, -s * 0.55);
+      ctx.lineTo(s * 0.12, -s * 0.55);
+      ctx.lineTo(s * 0.18, -s * 0.38);
+      // Hat brim
+      ctx.lineTo(s * 0.4, -s * 0.35);
+      ctx.lineTo(s * 0.4, -s * 0.3);
+      // Head right
+      ctx.lineTo(s * 0.15, -s * 0.3);
+      ctx.quadraticCurveTo(s * 0.18, -s * 0.1, s * 0.1, -s * 0.05);
+      // Right arm
+      ctx.lineTo(s * 0.5, -s * 0.1);
+      ctx.lineTo(s * 0.5, s * 0.02);
+      ctx.lineTo(s * 0.12, s * 0.05);
+      // Body right
+      ctx.lineTo(s * 0.15, s * 0.25);
+      // Right leg
+      ctx.lineTo(s * 0.25, s * 0.55);
+      ctx.lineTo(s * 0.12, s * 0.55);
+      ctx.lineTo(s * 0.03, s * 0.3);
+      // Left leg
+      ctx.lineTo(-s * 0.03, s * 0.3);
+      ctx.lineTo(-s * 0.12, s * 0.55);
+      ctx.lineTo(-s * 0.25, s * 0.55);
+      // Body left
+      ctx.lineTo(-s * 0.15, s * 0.25);
+      ctx.lineTo(-s * 0.12, s * 0.05);
+      // Left arm
+      ctx.lineTo(-s * 0.5, s * 0.02);
+      ctx.lineTo(-s * 0.5, -s * 0.1);
+      ctx.lineTo(-s * 0.1, -s * 0.05);
+      // Head left
+      ctx.quadraticCurveTo(-s * 0.18, -s * 0.1, -s * 0.15, -s * 0.3);
+      ctx.lineTo(-s * 0.4, -s * 0.3);
+      ctx.lineTo(-s * 0.4, -s * 0.35);
+      ctx.lineTo(-s * 0.18, -s * 0.38);
+      ctx.closePath();
+      ctx.clip();
+
+      // Fill with ASCII characters in straw colors
+      const fontSize = 6;
+      const strawChars = '稻草人木田禾米#%&+;:'.split('');
+      const strawColors = revealed
+        ? ['#c44', '#a33', '#d55', '#b22']
+        : ['#c8a840', '#b89830', '#d4b050', '#a08020', '#c09028'];
+      ctx.font = `bold ${fontSize}px "DM Mono", monospace`;
+      const left = -s * 0.55, right = s * 0.55;
+      const top2 = -s * 0.6, bottom2 = s * 0.6;
+      let ci = this._charSeed;
+      for (let cy = top2; cy < bottom2; cy += fontSize * 1.05) {
+        for (let cx = left; cx < right; cx += fontSize * 0.65) {
+          // Animate: shift chars over time for living feel
+          const animOff = Math.sin(t * 1.5 + cx * 0.1 + cy * 0.15) * 0.15;
+          if (Math.random() < 0.08 + animOff * 0.05) continue; // sparse gaps
+          ctx.fillStyle = strawColors[(ci) % strawColors.length];
+          ctx.fillText(strawChars[(ci++) % strawChars.length], cx, cy);
+        }
+      }
+
+      ctx.restore();
+
+      // Eyes on top (not clipped)
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(sway);
+      ctx.scale(1, scaleBreath);
+      // Eyes — dark X marks
+      const eyeS = s * 0.05;
+      ctx.strokeStyle = revealed ? '#200' : '#302010';
+      ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      for (const ex of [-s * 0.06, s * 0.06]) {
+        const ey2 = -s * 0.22;
+        ctx.beginPath(); ctx.moveTo(ex - eyeS, ey2 - eyeS); ctx.lineTo(ex + eyeS, ey2 + eyeS); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ex + eyeS, ey2 - eyeS); ctx.lineTo(ex - eyeS, ey2 + eyeS); ctx.stroke();
+      }
+      // Stitched mouth
+      ctx.strokeStyle = revealed ? '#300' : '#403020'; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let i = -3; i <= 3; i++) {
+        const mx = i * s * 0.03, my = -s * 0.12;
+        if (i === -3) ctx.moveTo(mx, my);
+        else { ctx.lineTo(mx, my + (i % 2 === 0 ? -s*0.015 : s*0.015)); }
+      }
+      ctx.stroke();
+
+      // Revealed glow
+      if (revealed) {
+        ctx.strokeStyle = 'rgba(255,50,50,0.35)'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(0, 0, s * 0.65, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,80,30,0.15)'; ctx.lineWidth = 8;
+        ctx.beginPath(); ctx.arc(0, 0, s * 0.7, 0, Math.PI * 2); ctx.stroke();
+      }
+
       ctx.restore();
       return;
     }
@@ -1687,7 +1884,7 @@ const EnemyTypes = {
   WATER_FLOW: {
     hp: 35, speed: 220, radius: 14, color: '#48f', damage: 8, attackCooldown: 1.2,
     behavior: 'water', score: 15,
-    floatingText: ["i'm the worst", "i'm stupid", "i cannot do it", "why bother"],
+    floatingText: ["everyone would be better off", "i can't feel anything", "what's the point", "i used to be someone"],
   },
   BOSS_PILLOW: {
     hp: 400, speed: 180, radius: 22, color: '#88c', damage: 30, attackCooldown: 1.0,
@@ -1695,8 +1892,8 @@ const EnemyTypes = {
   },
   // Level 4: Fear
   BAT: {
-    hp: 40, speed: 200, radius: 10, color: '#e88', damage: 18, attackCooldown: 0.8,
-    behavior: 'bat', growthRate: 5, score: 12,
+    hp: 30, speed: 160, radius: 6, color: '#e88', damage: 8, attackCooldown: 1.2,
+    behavior: 'bat', growthRate: 2, score: 12,
   },
   BOSS_TIGER: {
     hp: 500, speed: 180, radius: 35, color: '#fa0', damage: 28, attackCooldown: 0.4,
@@ -1708,7 +1905,7 @@ const EnemyTypes = {
     behavior: 'scarecrow', isFake: true, score: 2,
   },
   SCARECROW_REAL: {
-    hp: 1, speed: 200, radius: 16, color: '#a86', damage: 22, attackCooldown: 0.5,
+    hp: 1, speed: 200, radius: 16, color: '#a86', damage: 10, attackCooldown: 0.8,
     behavior: 'scarecrow', isFake: false, realHp: 400, score: 100, isBoss: true,
   },
 };

@@ -593,7 +593,8 @@ const AsciiSprite = {
         } else {
           // Default: remove gray bg + near-white
           const grayBrightThresh = opts.grayThreshold || 0.82;
-          if (spread < 20 && brightness > grayBrightThresh) continue;
+          // Remove any pixel brighter than threshold, regardless of color spread
+          if (brightness > grayBrightThresh) continue;
           if (r > 225 && g > 225 && b > 225) continue;
         }
 
@@ -858,7 +859,7 @@ async function loadMonsterSprites() {
     'enemy_pillow':       { src: monsterPath + 'L3boss_pillow.png', opts: { ...bossOpts, softBg: true, brighten: 1.0 } },
     'enemy_bat':          { src: monsterPath + 'L4enemy_bat.png', opts: { ...monsterOpts, grayThreshold: 0.35 } },
     'enemy_paper_tiger':  { src: monsterPath + 'L4boss_tiger.png', opts: bossOpts },
-    'enemy_scarecrow':    { src: monsterPath + 'L6enemy_scarecrow.png', opts: monsterOpts },
+    'enemy_scarecrow':    { src: monsterPath + 'L6enemy_scarecrow.png', opts: { ...monsterOpts, grayThreshold: 0.35 } },
   };
 
   // Also load memory card diamond

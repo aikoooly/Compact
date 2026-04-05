@@ -291,7 +291,7 @@ const Game = {
     ctx.fillStyle = Theme.accent; ctx.font = `20px ${F}`;
     ctx.fillText(`compact_level = ${this.compactLevel};`, this.width / 2, this.height / 2 + 30);
     ctx.fillStyle = Theme.secondary; ctx.font = `16px ${F}`;
-    ctx.fillText(`// damage +${this.compactLevel * 10}%  range +${this.compactLevel * 12}px`, this.width / 2, this.height / 2 + 60);
+    ctx.fillText(`// damage +${this.compactLevel * 10}%  bullet size +${this.compactLevel * 2}px  melee range +${this.compactLevel * 12}px`, this.width / 2, this.height / 2 + 60);
     if (t < 1.5) {
       ctx.fillStyle = Theme.accent; ctx.font = `18px ${F}`;
       ctx.fillText('[ click to retry ]', this.width / 2, this.height / 2 + 110);
@@ -331,7 +331,7 @@ const Game = {
       ctx.fillStyle = Theme.secondary; ctx.font = `16px ${F}`;
       ctx.fillText(`compact level: ${this.compactLevel}`, this.width / 2, this.height / 2 + 20);
       ctx.fillStyle = Theme.accent; ctx.font = `14px ${F}`;
-      ctx.fillText(`damage +${this.compactLevel * 10}%  |  range +${this.compactLevel * 12}px`, this.width / 2, this.height / 2 + 45);
+      ctx.fillText(`damage +${this.compactLevel * 10}%  |  bullet +${this.compactLevel * 2}px  |  melee +${this.compactLevel * 12}px`, this.width / 2, this.height / 2 + 45);
       ctx.fillStyle = Theme.textMuted; ctx.font = `13px ${F}`;
       ctx.fillText(`deaths: ${this.totalDeaths}`, this.width / 2, this.height / 2 + 70);
     }
