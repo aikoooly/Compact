@@ -293,6 +293,7 @@ const Levels = [
     ],
     waves: [
       { spawns: [{ type: EnemyTypes.LIKE, count: 2, delay: 0.6 }, { type: EnemyTypes.COMMENT, count: 1, delay: 0.6 }] },
+      { spawns: [{ type: EnemyTypes.LIKE, count: 2, delay: 0.5 }, { type: EnemyTypes.RETWEET, count: 2, delay: 0.5 }] },
       { spawns: [{ type: EnemyTypes.LIKE, count: 3, delay: 0.4 }, { type: EnemyTypes.RETWEET, count: 2, delay: 0.4 }, { type: EnemyTypes.COMMENT, count: 2, delay: 0.4 }] },
       { spawns: [{ type: EnemyTypes.BOSS_MIRROR, count: 1, delay: 0 }] },
     ],
@@ -311,8 +312,9 @@ const Levels = [
       { title: 'Level 2: Anxiety', text: 'they come from everywhere — crawling, circling, closing in.\nthousands of legs on the floor of your mind.\nanxiety breeds in the dark corners you refuse to look at.\nthe only way out is stillness. one breath. one bullet. one kill.\n\nCLICK to fire. R to reload. 8 bullets per magazine.\nRIGHT CLICK to dash.' },
     ],
     waves: [
+      { spawns: [{ type: EnemyTypes.SPIDER, count: 6, delay: 0.2 }] },
       { spawns: [{ type: EnemyTypes.SPIDER, count: 8, delay: 0.15 }] },
-      { spawns: [{ type: EnemyTypes.SPIDER, count: 12, delay: 0.1 }] },
+      { spawns: [{ type: EnemyTypes.SPIDER, count: 10, delay: 0.12 }] },
       { spawns: [{ type: EnemyTypes.BOSS_SPIDER, count: 1, delay: 0 }] },
     ],
     memoryCards: ['"can you get this done by tonight?"', '"just a quick call, five minutes"', '"sorry to bother you, but—"', '"you have 47 unread messages"'],
@@ -335,6 +337,7 @@ const Levels = [
     ],
     waves: [
       { spawns: [{ type: EnemyTypes.WATER_FLOW, count: 2, delay: 0.6 }] },
+      { spawns: [{ type: EnemyTypes.WATER_FLOW, count: 2, delay: 0.5 }] },
       { spawns: [{ type: EnemyTypes.WATER_FLOW, count: 3, delay: 0.4 }] },
       { spawns: [{ type: EnemyTypes.BOSS_PILLOW, count: 1, delay: 0 }] },
     ],
@@ -353,7 +356,8 @@ const Levels = [
       { title: 'Level 4: Fear', text: 'fear grows in the silence.\nthe longer you wait, the larger they become.\nevery second of hesitation feeds them.\nthrow fast. don\'t let them grow.\n\nCLICK to throw darts. R to recall.\n25 darts total. Make them count.' },
     ],
     waves: [
-      { spawns: [{ type: EnemyTypes.BAT, count: 6, delay: 0.3 }] },
+      { spawns: [{ type: EnemyTypes.BAT, count: 4, delay: 0.3 }] },
+      { spawns: [{ type: EnemyTypes.BAT, count: 6, delay: 0.25 }] },
       { spawns: [{ type: EnemyTypes.BAT, count: 8, delay: 0.2 }] },
       { spawns: [{ type: EnemyTypes.BOSS_TIGER, count: 1, delay: 0 }] },
     ],

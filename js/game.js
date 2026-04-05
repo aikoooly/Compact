@@ -190,7 +190,14 @@ const Game = {
         );
         this.state = 'choice'; return;
       }
-      this.startCombat();
+      // After outro, advance to next level (not restart current!)
+      if (this._afterOutroLevel != null) {
+        const next = this._afterOutroLevel;
+        this._afterOutroLevel = null;
+        this.startLevel(next);
+      } else {
+        this.startCombat();
+      }
     }
   },
 
