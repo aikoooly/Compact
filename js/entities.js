@@ -222,13 +222,12 @@ class BoxingGloves {
         }
       }
     }
-    // Fist / aim indicator with ring — offset up 10px to chest/hand level
+    // Fist / aim indicator with ring — fixed size, offset up 10px
     const aimOffY = -10;
-    const fistDist = 22 + (this.charging ? Math.min(this.chargeTime * 4, 10) : 0);
+    const fistDist = 22;
     const fx = player.x + Math.cos(player.angle) * fistDist;
     const fy = player.y + aimOffY + Math.sin(player.angle) * fistDist;
-    // Outer ring (semi-transparent, pulsing)
-    const ringSize = 14 + (this.charging ? Math.min(this.chargeTime * 3, 8) : 0);
+    const ringSize = 14;
     const pulse = 1 + Math.sin(Date.now() / 150) * 0.15;
     ctx.globalAlpha = 0.25; ctx.strokeStyle = this.color; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(fx, fy, ringSize * pulse, 0, Math.PI * 2); ctx.stroke();
