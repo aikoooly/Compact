@@ -85,16 +85,18 @@ class MeleeHit {
   draw(ctx) {
     if (this.isKatana) return; // katana draws its own blade sweep, skip MeleeHit visual
     const t = this.life / this.maxLife;
+    // Visual arc is capped at 60px so it doesn't look huge (hitbox is still full range)
+    const visualRange = Math.min(this.range, 60);
     ctx.globalAlpha = t * 0.6;
     ctx.strokeStyle = this.color; ctx.lineWidth = 4 * t + 2;
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.range * (1 - t * 0.3), this.angle - this.arcWidth / 2, this.angle + this.arcWidth / 2);
+    ctx.arc(this.x, this.y, visualRange * (1 - t * 0.3), this.angle - this.arcWidth / 2, this.angle + this.arcWidth / 2);
     ctx.stroke();
     // Impact flash
     ctx.fillStyle = '#fff'; ctx.globalAlpha = t * 0.3;
     ctx.beginPath();
     ctx.moveTo(this.x, this.y);
-    ctx.arc(this.x, this.y, this.range * 0.8, this.angle - this.arcWidth / 2, this.angle + this.arcWidth / 2);
+    ctx.arc(this.x, this.y, visualRange * 0.8, this.angle - this.arcWidth / 2, this.angle + this.arcWidth / 2);
     ctx.closePath(); ctx.fill();
     ctx.globalAlpha = 1;
   }
