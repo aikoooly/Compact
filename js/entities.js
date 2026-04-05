@@ -109,7 +109,7 @@ class BoxingGloves {
   constructor() {
     this.name = 'BOXING GLOVES'; this.color = Theme.accent;
     this.chargeTime = 0; this.charging = false;
-    this.punchCooldown = 0; this.baseRange = 55;
+    this.punchCooldown = 0; this.baseRange = 110;
     this.baseDamage = 100; // at full charge
     this.lockedAngle = 0; // direction locked at charge start
   }
@@ -140,7 +140,7 @@ class BoxingGloves {
     if (t >= 2.0)      { dmgPct = 1.0;  rangeMul = 1.6; knockback = 300; shakeAmt = 14; lungeDist = 280; lungeDuration = 0.18; }
     else if (t >= 1.0) { dmgPct = 0.7;  rangeMul = 1.3; knockback = 200; shakeAmt = 9;  lungeDist = 170; lungeDuration = 0.14; }
     else if (t >= 0.5) { dmgPct = 0.3;  rangeMul = 1.1; knockback = 120; shakeAmt = 5;  lungeDist = 90;  lungeDuration = 0.10; }
-    else               { dmgPct = 0.12; rangeMul = 0.8; knockback = 60;  shakeAmt = 3;  lungeDist = 0;   lungeDuration = 0; }
+    else               { dmgPct = 0.12; rangeMul = 1.0; knockback = 60;  shakeAmt = 3;  lungeDist = 0;   lungeDuration = 0; }
     const range = this.getRange(player.compactLevel) * rangeMul;
     const damage = this.baseDamage * dmgPct * (1 + player.compactLevel * 0.1);
     const arc = t >= 1.0 ? 1.8 : 1.2;
