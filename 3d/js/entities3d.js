@@ -941,7 +941,7 @@ class Player {
     // Eyes: two specific dots (dark)
     this._bodyDots.push({ lx: 5, ly: 31, lz: -3, isEye: true });
     this._bodyDots.push({ lx: 5, ly: 31, lz: 3, isEye: true });
-  },
+  }
 
   updateMesh() {
     if (!this.mesh) return;
