@@ -25,7 +25,6 @@ const Game = {
     Input.init(Renderer.renderer.domElement);
     Audio.init();
     Particles.init();
-    EntityDots.init();
 
     // Create crosshair (always visible during gameplay)
     this.crosshair = Models.createCrosshair();
@@ -124,11 +123,9 @@ const Game = {
 
     // Render 3D scene
     if (this.state === 'playing' || this.state === 'gameover') {
-      // Sync all meshes + entity dot clouds
-      EntityDots.beginFrame();
+      // Sync all 3D meshes
       if (this.player) this.player.updateMesh();
       if (this.waveManager) this.waveManager.updateMeshes();
-      EntityDots.render();
       Particles.update(gameDt);
       Camera.apply();
 
@@ -138,7 +135,7 @@ const Game = {
         this.crosshair.position.set(Input.mouse.worldX, 0, Input.mouse.worldY);
         // Pulse animation
         const pulse = 1 + Math.sin(Date.now() / 200) * 0.1;
-        this.crosshair.scale.setScalar(pulse);
+        this.crosshair.scale.setScalar(pulse * 0.6);
       }
       this.updateHUD();
     } else {

@@ -36,6 +36,7 @@ const Models = {
     inner.add(eyeR);
 
     group.add(inner);
+    group.scale.setScalar(3);
     group.userData.bodyMat = mat;
     return group;
   },
