@@ -340,37 +340,41 @@ const Effects = {
   },
 };
 
-// --- Particle System (3D version using THREE.Points) ---
+// --- Halftone Particle System ---
+// Renders particles as grid-snapped dots: dense center, sparse edges
+// Creates the ASCII/halftone dissolve look from the reference art
 const Particles = {
   list: [],
-  points: null,
-  maxParticles: 600,
-  positions: null,
-  colors: null,
-  sizes: null,
-  geometry: null,
+  maxParticles: 800,
+  // Grid settings
+  gridSize: 8,         // world-space grid cell size
+  // InstancedMesh for halftone dots
+  _dotMesh: null,
+  _maxDots: 1200,
+  _dummy: null,
+  _gridMap: null,       // Map<"gx,gz"> → { energy, r, g, b, height }
 
   init() {
-    this.geometry = new THREE.BufferGeometry();
-    this.positions = new Float32Array(this.maxParticles * 3);
-    this.colors = new Float32Array(this.maxParticles * 3);
-    this.sizes = new Float32Array(this.maxParticles);
-
-    this.geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
-    this.geometry.setAttribute('color', new THREE.BufferAttribute(this.colors, 3));
-    this.geometry.setAttribute('size', new THREE.BufferAttribute(this.sizes, 1));
-
-    const mat = new THREE.PointsMaterial({
-      size: 4,
-      vertexColors: true,
+    // Create a small circle geometry for each dot
+    const dotGeo = new THREE.CircleGeometry(3, 8);
+    dotGeo.rotateX(-Math.PI / 2); // lie flat on ground
+    const dotMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
       transparent: true,
-      opacity: 0.8,
-      sizeAttenuation: true,
+      opacity: 0.9,
       depthWrite: false,
     });
-
-    this.points = new THREE.Points(this.geometry, mat);
-    Renderer.particlesGroup.add(this.points);
+    this._dotMesh = new THREE.InstancedMesh(dotGeo, dotMat, this._maxDots);
+    this._dotMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    // Per-instance color
+    this._dotMesh.instanceColor = new THREE.InstancedBufferAttribute(
+      new Float32Array(this._maxDots * 3), 3
+    );
+    this._dotMesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+    this._dotMesh.frustumCulled = false;
+    Renderer.particlesGroup.add(this._dotMesh);
+    this._dummy = new THREE.Object3D();
+    this._gridMap = new Map();
   },
 
   emit(x, y, count, color, opts = {}) {
@@ -388,14 +392,14 @@ const Particles = {
       const l = life * (0.5 + Math.random() * 0.5);
       const sz = size * (0.5 + Math.random() * 0.5);
       this.list.push({
-        x, y, // game coords
+        x, y,
         vx: Math.cos(a) * s,
         vy: Math.sin(a) * s,
         life: l, maxLife: l,
         size: sz, startSize: sz,
         r: c.r, g: c.g, b: c.b,
         friction: opts.friction || 0.98,
-        height: opts.height || 5, // 3D height
+        height: opts.height || 2,
       });
     }
   },
@@ -409,6 +413,7 @@ const Particles = {
   },
 
   update(dt) {
+    // Update particle physics
     for (let i = this.list.length - 1; i >= 0; i--) {
       const p = this.list[i];
       p.vx *= p.friction;
@@ -422,33 +427,80 @@ const Particles = {
       }
     }
 
-    // Update buffer
-    for (let i = 0; i < this.maxParticles; i++) {
-      if (i < this.list.length) {
-        const p = this.list[i];
-        const alpha = clamp(p.life / p.maxLife, 0, 1);
-        this.positions[i * 3] = p.x;
-        this.positions[i * 3 + 1] = p.height;
-        this.positions[i * 3 + 2] = p.y; // game y → 3D z
-        this.colors[i * 3] = p.r * alpha;
-        this.colors[i * 3 + 1] = p.g * alpha;
-        this.colors[i * 3 + 2] = p.b * alpha;
-        this.sizes[i] = Math.max(0.5, p.size);
+    // === Halftone grid rendering ===
+    // 1. Accumulate particle energy onto a world-space grid
+    const gs = this.gridSize;
+    this._gridMap.clear();
+
+    for (const p of this.list) {
+      const gx = Math.round(p.x / gs) * gs;
+      const gz = Math.round(p.y / gs) * gs;
+      const key = gx + ',' + gz;
+      const alpha = clamp(p.life / p.maxLife, 0, 1);
+      const energy = alpha * p.size;
+
+      if (this._gridMap.has(key)) {
+        const cell = this._gridMap.get(key);
+        cell.energy += energy;
+        // Blend colors weighted by energy
+        cell.r += p.r * energy;
+        cell.g += p.g * energy;
+        cell.b += p.b * energy;
+        cell.totalWeight += energy;
+        cell.height = Math.max(cell.height, p.height);
       } else {
-        this.positions[i * 3 + 1] = -1000; // hide unused
-        this.sizes[i] = 0;
+        this._gridMap.set(key, {
+          gx, gz, energy,
+          r: p.r * energy, g: p.g * energy, b: p.b * energy,
+          totalWeight: energy,
+          height: p.height,
+        });
       }
     }
 
-    this.geometry.attributes.position.needsUpdate = true;
-    this.geometry.attributes.color.needsUpdate = true;
-    this.geometry.attributes.size.needsUpdate = true;
+    // 2. Render each active grid cell as a dot
+    let dotIndex = 0;
+    for (const cell of this._gridMap.values()) {
+      if (dotIndex >= this._maxDots) break;
+
+      // Normalize color
+      const w = cell.totalWeight || 1;
+      const r = cell.r / w;
+      const g = cell.g / w;
+      const b = cell.b / w;
+
+      // Dot size: energy controls radius (capped)
+      // High energy = big dot (dense center), low = small dot (sparse edge)
+      const dotRadius = clamp(cell.energy * 0.6, 1.0, 3.5);
+
+      // Density threshold: very low energy dots randomly disappear (sparse edges)
+      if (cell.energy < 0.5 && Math.random() > cell.energy * 2) continue;
+
+      this._dummy.position.set(cell.gx, cell.height, cell.gz);
+      this._dummy.scale.setScalar(dotRadius);
+      this._dummy.updateMatrix();
+      this._dotMesh.setMatrixAt(dotIndex, this._dummy.matrix);
+      this._dotMesh.instanceColor.setXYZ(dotIndex, r, g, b);
+      dotIndex++;
+    }
+
+    // Hide remaining instances
+    for (let i = dotIndex; i < this._maxDots; i++) {
+      this._dummy.position.set(0, -1000, 0);
+      this._dummy.scale.setScalar(0);
+      this._dummy.updateMatrix();
+      this._dotMesh.setMatrixAt(i, this._dummy.matrix);
+    }
+
+    this._dotMesh.instanceMatrix.needsUpdate = true;
+    this._dotMesh.instanceColor.needsUpdate = true;
+    this._dotMesh.count = Math.min(dotIndex, this._maxDots);
   },
 
   clear() {
     this.list = [];
+    this._gridMap.clear();
   },
 
-  // Compat: draw is a no-op in 3D (particles render via Points)
   draw() {},
 };
