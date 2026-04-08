@@ -897,37 +897,62 @@ class Player {
     if (this.hp <= 0) { this.hp = 0; this.dead = true; }
   }
 
+  _initBodyDots() {
+    if (this._bodyDots) return;
+    this._bodyDots = [];
+    // Player body: cylinder (radius 10, height 24) scaled by 2.5
+    const s = 2.5;
+    // Body cylinder
+    this._bodyDots.push(...EntityDots.sampleCylinder(0, 0, 0, 10 * s, 24 * s, 0.85));
+    // Head sphere at top
+    this._bodyDots.push(...EntityDots.sampleSphere(0, 30 * s, 0, 8 * s, 0.9));
+    // Eyes
+    this._bodyDots.push({ lx: 5 * s, ly: 31 * s, lz: -3 * s, isEye: true });
+    this._bodyDots.push({ lx: 5 * s, ly: 31 * s, lz: 3 * s, isEye: true });
+  }
+
   updateMesh() {
     if (!this.mesh) return;
+    this._initBodyDots();
 
-    // Position
-    this.mesh.position.set(this.x, 0, this.y);
-    // Rotation: face aim direction
-    // In game coords: angle=0 is +X (right), angle=PI/2 is +Y (down in 2D = +Z in 3D)
-    // Player model faces +Z when rotation.y=0, faces +X when rotation.y=-PI/2
-    // So: rotation.y = -angle (negate because Three.js Y rotation is CCW from above)
-    this.mesh.rotation.y = -this.angle;
+    // Hide solid mesh — player is rendered as dot cloud
+    this.mesh.visible = false;
 
-    // Death: hide
-    if (this.dead) {
-      this.mesh.visible = false;
-      return;
-    }
+    if (this.dead) return;
 
     // Invincibility blink
-    if (this.invincible && !this.dashing && Math.floor(Date.now() / 60) % 2 === 0) {
-      this.mesh.visible = false;
-    } else {
-      this.mesh.visible = true;
+    const blinkOff = this.invincible && !this.dashing && Math.floor(Date.now() / 60) % 2 === 0;
+
+    if (!blinkOff) {
+      // Submit player body dots
+      const c = new THREE.Color(this.hitFlashTimer > 0 ? '#fff' : this.bodyColor);
+      const eyeColor = { r: 0.04, g: 0.08, b: 0.1 };
+      const cos = Math.cos(-this.angle), sin = Math.sin(-this.angle);
+      const dots = [];
+      for (const ld of this._bodyDots) {
+        const rx = ld.lx * cos - ld.lz * sin;
+        const rz = ld.lx * sin + ld.lz * cos;
+        const col = ld.isEye ? eyeColor : { r: c.r, g: c.g, b: c.b };
+        dots.push({
+          x: this.x + rx, y: ld.ly, z: this.y + rz,
+          r: col.r, g: col.g, b: col.b,
+          size: ld.isEye ? 3.0 : 3.5,
+        });
+      }
+      EntityDots.submit(dots);
     }
 
-    // Hit flash: turn white
-    const bodyMat = this.mesh.userData.bodyMat;
-    if (bodyMat) {
-      if (this.hitFlashTimer > 0) {
-        bodyMat.color.set('#fff');
-      } else {
-        bodyMat.color.set(this.bodyColor);
+    // Movement trail
+    const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+    if (speed > 50) {
+      const t = clamp(speed / 300, 0.2, 1);
+      if (Math.random() < t) {
+        Particles.emit(
+          this.x - this.vx * 0.02, this.y - this.vy * 0.02,
+          Math.floor(1 + t * 3), this.bodyColor,
+          { speed: 30, life: 0.3 + t * 0.3, size: 2 + t * 2,
+            angle: Math.atan2(-this.vy, -this.vx), spread: 0.8 }
+        );
       }
     }
 
@@ -936,42 +961,32 @@ class Player {
       this.weapon.updateVisuals(this);
     }
 
-    // Afterimage management
-    // Clean up old afterimage meshes
+    // Afterimages as sparse dot clouds
+    for (const ai of this.afterimages) {
+      if (ai.alpha < 0.15) continue;
+      const ac = new THREE.Color(this.bodyColor);
+      const acos = Math.cos(-ai.angle), asin = Math.sin(-ai.angle);
+      const aiDots = [];
+      for (let i = 0; i < this._bodyDots.length; i += 3) {
+        const ld = this._bodyDots[i];
+        if (ld.isEye) continue;
+        const rx = ld.lx * acos - ld.lz * asin;
+        const rz = ld.lx * asin + ld.lz * acos;
+        aiDots.push({
+          x: ai.x + rx, y: ld.ly, z: ai.y + rz,
+          r: ac.r * ai.alpha, g: ac.g * ai.alpha, b: ac.b * ai.alpha,
+          size: 2.0 * ai.alpha,
+        });
+      }
+      EntityDots.submit(aiDots);
+    }
+
+    // Clean up legacy afterimage meshes
     this._afterimageMeshes = this._afterimageMeshes.filter(am => {
       am.life -= 0.016;
-      if (am.life <= 0) {
-        Renderer.removeFromScene(am.mesh);
-        return false;
-      }
-      am.mesh.traverse(child => {
-        if (child.material) {
-          child.material.transparent = true;
-          child.material.opacity = am.life * 0.3;
-        }
-      });
+      if (am.life <= 0) { Renderer.removeFromScene(am.mesh); return false; }
       return true;
     });
-
-    // Create new afterimage meshes for recent afterimages
-    while (this.afterimages.length > 0 && this._afterimageMeshes.length < 8) {
-      const ai = this.afterimages[0];
-      if (ai.alpha > 0.3) {
-        const clone = Models.createPlayer();
-        clone.position.set(ai.x, 0, ai.y);
-        clone.rotation.y = -ai.angle + Math.PI / 2;
-        clone.traverse(child => {
-          if (child.material) {
-            child.material = child.material.clone();
-            child.material.transparent = true;
-            child.material.opacity = 0.3;
-          }
-        });
-        Renderer.addToScene(clone);
-        this._afterimageMeshes.push({ mesh: clone, life: 0.3 });
-      }
-      break; // Only one per frame
-    }
   }
 
   destroy() {
@@ -1017,7 +1032,7 @@ class Enemy {
     // 3D mesh
     this.mesh = this._createMesh();
     this.mesh.position.set(this.x, 0, this.y);
-    this._baseScale = 3; // 3x scale for all enemies
+    this._baseScale = 2.5; // 3x scale for all enemies
     this.mesh.scale.setScalar(0.01); // start tiny for spawn
     Renderer.addToScene(this.mesh);
 

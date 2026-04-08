@@ -32,7 +32,7 @@ const Renderer = {
 
     // Orthographic camera for isometric view — zoomed in for larger entities
     const aspect = this.width / this.height;
-    const frustum = 200;
+    const frustum = 280;
     this.camera = new THREE.OrthographicCamera(
       -frustum * aspect, frustum * aspect,
       frustum, -frustum,
@@ -119,7 +119,7 @@ const Renderer = {
     this.width = this.container.clientWidth || 1280;
     this.height = this.container.clientHeight || 720;
     const aspect = this.width / this.height;
-    const frustum = 200;
+    const frustum = 280;
     this.camera.left = -frustum * aspect;
     this.camera.right = frustum * aspect;
     this.camera.top = frustum;

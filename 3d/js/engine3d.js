@@ -504,3 +504,96 @@ const Particles = {
 
   draw() {},
 };
+
+// --- Entity Dot Cloud System (for player only) ---
+const EntityDots = {
+  _dotMesh: null,
+  _maxDots: 2000,
+  _dummy: null,
+  _dots: [],
+  gridSize: 5,
+
+  init() {
+    const geo = new THREE.CircleGeometry(1, 8);
+    geo.rotateX(-Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.95, depthWrite: false,
+    });
+    this._dotMesh = new THREE.InstancedMesh(geo, mat, this._maxDots);
+    this._dotMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this._dotMesh.instanceColor = new THREE.InstancedBufferAttribute(
+      new Float32Array(this._maxDots * 3), 3
+    );
+    this._dotMesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+    this._dotMesh.frustumCulled = false;
+    this._dotMesh.renderOrder = 1;
+    Renderer.particlesGroup.add(this._dotMesh);
+    this._dummy = new THREE.Object3D();
+  },
+
+  beginFrame() { this._dots = []; },
+
+  submit(dots) {
+    for (const d of dots) this._dots.push(d);
+  },
+
+  sampleSphere(cx, cy, cz, radius, density) {
+    const dots = [];
+    const gs = this.gridSize;
+    for (let x = -radius; x <= radius; x += gs) {
+      for (let y = -radius; y <= radius; y += gs) {
+        for (let z = -radius; z <= radius; z += gs) {
+          const dist = Math.sqrt(x*x + y*y + z*z);
+          if (dist > radius) continue;
+          const edgeFactor = 1 - (dist / radius);
+          if (Math.random() > (0.3 + edgeFactor * 0.7) * (density || 1)) continue;
+          dots.push({ lx: cx + x, ly: cy + y, lz: cz + z });
+        }
+      }
+    }
+    return dots;
+  },
+
+  sampleCylinder(cx, cy, cz, radius, height, density) {
+    const dots = [];
+    const gs = this.gridSize;
+    for (let x = -radius; x <= radius; x += gs) {
+      for (let y = 0; y <= height; y += gs) {
+        for (let z = -radius; z <= radius; z += gs) {
+          const dist2d = Math.sqrt(x*x + z*z);
+          if (dist2d > radius) continue;
+          const edgeFactor = 1 - (dist2d / radius);
+          if (Math.random() > (0.3 + edgeFactor * 0.7) * (density || 1)) continue;
+          dots.push({ lx: cx + x, ly: cy + y, lz: cz + z });
+        }
+      }
+    }
+    return dots;
+  },
+
+  render() {
+    const gs = this.gridSize;
+    let idx = 0;
+    for (const d of this._dots) {
+      if (idx >= this._maxDots) break;
+      const gx = Math.round(d.x / gs) * gs;
+      const gy = Math.round(d.y / gs) * gs;
+      const gz = Math.round(d.z / gs) * gs;
+      this._dummy.position.set(gx, gy, gz);
+      this._dummy.scale.setScalar(d.size || 2.5);
+      this._dummy.updateMatrix();
+      this._dotMesh.setMatrixAt(idx, this._dummy.matrix);
+      this._dotMesh.instanceColor.setXYZ(idx, d.r || 0, d.g || 0, d.b || 0);
+      idx++;
+    }
+    for (let i = idx; i < this._maxDots; i++) {
+      this._dummy.position.set(0, -1000, 0);
+      this._dummy.scale.setScalar(0);
+      this._dummy.updateMatrix();
+      this._dotMesh.setMatrixAt(i, this._dummy.matrix);
+    }
+    this._dotMesh.instanceMatrix.needsUpdate = true;
+    this._dotMesh.instanceColor.needsUpdate = true;
+    this._dotMesh.count = Math.min(idx, this._maxDots);
+  },
+};
