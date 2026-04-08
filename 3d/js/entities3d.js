@@ -227,14 +227,28 @@ class BoxingGloves {
   }
 
   updateVisuals(player) {
-    // Fist indicator
+    // Hide old solid meshes — all visuals via halftone dots now
+    this.fistGroup.visible = false;
+    this.chargeGlow.visible = false;
+
+    // Fist dot: a small cluster of dots at aim position
     const fistDist = 22;
     const fx = player.x + Math.cos(player.angle) * fistDist;
-    const fy = player.y + Math.sin(player.angle) * fistDist;
-    this.fistGroup.position.set(fx, 0, fy);
-    this.fistGroup.visible = true;
+    const fz = player.y + Math.sin(player.angle) * fistDist;
+    const fistDots = [];
+    const fc = new THREE.Color(this.color);
+    // Fist: small sphere of dots
+    for (let dx = -4; dx <= 4; dx += 4) {
+      for (let dy = 16; dy <= 24; dy += 4) {
+        for (let dz = -4; dz <= 4; dz += 4) {
+          if (dx*dx + dz*dz > 20) continue;
+          fistDots.push({ x: fx + dx, y: dy, z: fz + dz, r: fc.r, g: fc.g, b: fc.b, size: 2.0 });
+        }
+      }
+    }
+    EntityDots.submit(fistDots);
 
-    // Charge glow
+    // Charge: expanding halftone cloud around player
     if (this.charging) {
       const t = this.chargeTime;
       let tier = 0;
@@ -242,35 +256,53 @@ class BoxingGloves {
       else if (t >= 1.0) tier = 2;
       else if (t >= 0.5) tier = 1;
 
-      const range = this.getRange(player.compactLevel) * (0.8 + tier * 0.3);
-      this.chargeGlow.visible = true;
-      this.chargeGlow.position.set(player.x, 15, player.y);
-      this.chargeGlow.scale.setScalar(range / 50);
-      this.chargeGlow.material.opacity = 0.1 + tier * 0.05;
-
-      // Update charge ring
       const pct = clamp(t / 2.0, 0, 1);
-      const ring = this.fistGroup.userData.ring;
-      if (ring) {
-        ring.geometry.dispose();
-        ring.geometry = new THREE.RingGeometry(24, 28, 32, 1, 0, pct * Math.PI * 2);
-        const colors = [0xff8800, 0xff8800, 0xffaa00, 0xffffff];
-        ring.material.color.set(colors[tier]);
-      }
+      const chargeRadius = 20 + pct * 40;
+      const colors = ['#f80', '#f80', '#fa0', '#fff'];
+      const cc = new THREE.Color(colors[tier]);
 
-      // Orbiting particles for high charge
+      // Halftone charge ring: dots in a ring pattern
+      const numDots = Math.floor(8 + pct * 20);
+      const chargeDots = [];
+      for (let i = 0; i < numDots; i++) {
+        const a = (Math.PI * 2 / numDots) * i + Date.now() / 300;
+        const r = chargeRadius * (0.8 + Math.random() * 0.4);
+        // Density: inner ring dense, outer sparse
+        if (Math.random() > 0.4 + pct * 0.5) continue;
+        chargeDots.push({
+          x: player.x + Math.cos(a) * r,
+          y: 10 + Math.random() * 15,
+          z: player.y + Math.sin(a) * r,
+          r: cc.r, g: cc.g, b: cc.b,
+          size: 1.5 + pct * 1.5,
+        });
+      }
+      EntityDots.submit(chargeDots);
+
+      // Orbiting particle streams for high charge
       if (tier >= 2) {
-        for (let i = 0; i < 3; i++) {
-          const a = Date.now() / 200 + (Math.PI * 2 / 3) * i;
-          Particles.trail(player.x + Math.cos(a) * 25, player.y + Math.sin(a) * 25, tier >= 3 ? '#fff' : '#fa0', 2);
+        for (let i = 0; i < 4; i++) {
+          const a = Date.now() / 200 + (Math.PI * 2 / 4) * i;
+          Particles.trail(player.x + Math.cos(a) * 25, player.y + Math.sin(a) * 25, colors[tier], 3);
         }
       }
-    } else {
-      this.chargeGlow.visible = false;
-      const ring = this.fistGroup.userData.ring;
-      if (ring) {
-        ring.geometry.dispose();
-        ring.geometry = new THREE.RingGeometry(24, 28, 32, 1, 0, 0);
+
+      // Directional charge buildup: dots concentrating toward aim direction
+      if (pct > 0.3) {
+        const aimDots = [];
+        for (let d = 10; d < chargeRadius; d += 8) {
+          const spread = 0.3;
+          const a = player.angle + (Math.random() - 0.5) * spread;
+          if (Math.random() > pct) continue;
+          aimDots.push({
+            x: player.x + Math.cos(a) * d,
+            y: 12 + Math.random() * 10,
+            z: player.y + Math.sin(a) * d,
+            r: cc.r * 0.8, g: cc.g * 0.8, b: cc.b * 0.8,
+            size: 1.5,
+          });
+        }
+        EntityDots.submit(aimDots);
       }
     }
   }
@@ -897,37 +929,64 @@ class Player {
     if (this.hp <= 0) { this.hp = 0; this.dead = true; }
   }
 
+  // Pre-generate body dot samples (once)
+  _initBodyDots() {
+    if (this._bodyDots) return;
+    // Player body: cylinder (body) + sphere (head) in local space
+    this._bodyDots = [];
+    // Body cylinder: radius ~10, height 0-24
+    this._bodyDots.push(...EntityDots.sampleCylinder(0, 0, 0, 10, 24, 0.8));
+    // Head sphere: radius ~7 at y=28
+    this._bodyDots.push(...EntityDots.sampleSphere(0, 28, 0, 8, 0.9));
+    // Eyes: two specific dots (dark)
+    this._bodyDots.push({ lx: 5, ly: 31, lz: -3, isEye: true });
+    this._bodyDots.push({ lx: 5, ly: 31, lz: 3, isEye: true });
+  },
+
   updateMesh() {
     if (!this.mesh) return;
+    this._initBodyDots();
 
-    // Position
-    this.mesh.position.set(this.x, 0, this.y);
-    // Rotation: face aim direction
-    // In game coords: angle=0 is +X (right), angle=PI/2 is +Y (down in 2D = +Z in 3D)
-    // Player model faces +Z when rotation.y=0, faces +X when rotation.y=-PI/2
-    // So: rotation.y = -angle (negate because Three.js Y rotation is CCW from above)
-    this.mesh.rotation.y = -this.angle;
+    // Hide solid mesh — we render as dot cloud instead
+    this.mesh.visible = false;
 
-    // Death: hide
-    if (this.dead) {
-      this.mesh.visible = false;
-      return;
-    }
+    if (this.dead) return;
 
-    // Invincibility blink
+    // Invincibility blink: skip dots every other frame
     if (this.invincible && !this.dashing && Math.floor(Date.now() / 60) % 2 === 0) {
-      this.mesh.visible = false;
+      // Don't submit dots — creates blinking effect
     } else {
-      this.mesh.visible = true;
+      // Submit player body as halftone dot cloud
+      const c = new THREE.Color(this.hitFlashTimer > 0 ? '#fff' : this.bodyColor);
+      const eyeColor = { r: 0.04, g: 0.08, b: 0.1 };
+      const cos = Math.cos(-this.angle), sin = Math.sin(-this.angle);
+      const dots = [];
+      for (const ld of this._bodyDots) {
+        // Rotate local dot by player angle (around Y axis)
+        const rx = ld.lx * cos - ld.lz * sin;
+        const rz = ld.lx * sin + ld.lz * cos;
+        const col = ld.isEye ? eyeColor : { r: c.r, g: c.g, b: c.b };
+        dots.push({
+          x: this.x + rx, y: ld.ly, z: this.y + rz,
+          r: col.r, g: col.g, b: col.b,
+          size: ld.isEye ? 2.0 : 2.5,
+        });
+      }
+      EntityDots.submit(dots);
     }
 
-    // Hit flash: turn white
-    const bodyMat = this.mesh.userData.bodyMat;
-    if (bodyMat) {
-      if (this.hitFlashTimer > 0) {
-        bodyMat.color.set('#fff');
-      } else {
-        bodyMat.color.set(this.bodyColor);
+    // Movement trail: emit halftone particles when moving
+    const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+    if (speed > 50) {
+      const trailIntensity = clamp(speed / 300, 0.2, 1);
+      // Drop trail dots behind player
+      if (Math.random() < trailIntensity) {
+        Particles.emit(
+          this.x - this.vx * 0.02, this.y - this.vy * 0.02,
+          Math.floor(1 + trailIntensity * 3), this.bodyColor,
+          { speed: 30, life: 0.3 + trailIntensity * 0.3, size: 2 + trailIntensity * 2,
+            angle: Math.atan2(-this.vy, -this.vx), spread: 0.8 }
+        );
       }
     }
 
@@ -936,25 +995,39 @@ class Player {
       this.weapon.updateVisuals(this);
     }
 
-    // Afterimage management
-    // Clean up old afterimage meshes
+    // Afterimage as dot clouds (much simpler than mesh cloning)
+    for (const ai of this.afterimages) {
+      if (ai.alpha < 0.1) continue;
+      const ac = new THREE.Color(this.bodyColor);
+      const acos = Math.cos(-ai.angle), asin = Math.sin(-ai.angle);
+      const aiDots = [];
+      // Sparse sampling for afterimage (every other dot)
+      for (let i = 0; i < this._bodyDots.length; i += 3) {
+        const ld = this._bodyDots[i];
+        if (ld.isEye) continue;
+        const rx = ld.lx * acos - ld.lz * asin;
+        const rz = ld.lx * asin + ld.lz * acos;
+        aiDots.push({
+          x: ai.x + rx, y: ld.ly, z: ai.y + rz,
+          r: ac.r * ai.alpha, g: ac.g * ai.alpha, b: ac.b * ai.alpha,
+          size: 1.5 * ai.alpha,
+        });
+      }
+      EntityDots.submit(aiDots);
+    }
+
+    // Clean up old afterimage meshes (legacy, still needed for cleanup)
     this._afterimageMeshes = this._afterimageMeshes.filter(am => {
       am.life -= 0.016;
       if (am.life <= 0) {
         Renderer.removeFromScene(am.mesh);
         return false;
       }
-      am.mesh.traverse(child => {
-        if (child.material) {
-          child.material.transparent = true;
-          child.material.opacity = am.life * 0.3;
-        }
-      });
       return true;
     });
 
-    // Create new afterimage meshes for recent afterimages
-    while (this.afterimages.length > 0 && this._afterimageMeshes.length < 8) {
+    // No longer create clone meshes for afterimages
+    while (this.afterimages.length > 0 && false) {
       const ai = this.afterimages[0];
       if (ai.alpha > 0.3) {
         const clone = Models.createPlayer();
@@ -1388,47 +1461,77 @@ class Enemy {
     return Vec.dist(this, player) < this.radius + player.radius;
   }
 
+  _initBodyDots() {
+    if (this._bodyDots) return;
+    this._bodyDots = [];
+    const r = this.radius;
+    // Generate dots based on enemy type shape
+    if (this.isBoss) {
+      // Bosses: large sphere
+      this._bodyDots = EntityDots.sampleSphere(0, r * 1.2, 0, r * 1.5, 0.7);
+    } else {
+      // Regular enemies: smaller sphere
+      this._bodyDots = EntityDots.sampleSphere(0, r, 0, r * 1.2, 0.8);
+    }
+  }
+
   updateMesh() {
     if (!this.mesh) return;
+    this._initBodyDots();
 
-    // Position
-    this.mesh.position.set(this.x, 0, this.y);
+    // Hide solid mesh — render as dot cloud
+    this.mesh.visible = false;
 
-    // Spawn animation
+    // Spawn animation: sparse dots that fill in
     if (this.spawnTimer > 0) {
       const t = 1 - this.spawnTimer / 0.4;
-      this.mesh.scale.setScalar(t);
+      const c = new THREE.Color(this.color);
+      const dots = [];
+      for (const ld of this._bodyDots) {
+        if (Math.random() > t) continue; // sparse during spawn
+        dots.push({
+          x: this.x + ld.lx * t, y: ld.ly * t, z: this.y + ld.lz * t,
+          r: c.r, g: c.g, b: c.b, size: 2.0 * t,
+        });
+      }
+      EntityDots.submit(dots);
       return;
-    } else {
-      // Breathing
-      const t = Date.now() / 1000;
-      const breath = 1 + Math.sin(t * 2.2 + this.phaseTimer) * 0.08;
-      this.mesh.scale.set(1, breath, 1);
     }
 
-    // Dying animation
+    // Dying: dots scatter outward
     if (this.dying) {
       const t = 1 - this.dyingTimer / 0.3;
-      this.mesh.scale.setScalar(1 + t * 0.5);
-      this.mesh.traverse(child => {
-        if (child.material && child.material.transparent !== undefined) {
-          child.material.transparent = true;
-          child.material.opacity = 1 - t;
-        }
+      const c = new THREE.Color(this.color);
+      const dots = [];
+      for (const ld of this._bodyDots) {
+        if (Math.random() > (1 - t)) continue; // dots disappear over time
+        const scatter = t * 30;
+        dots.push({
+          x: this.x + ld.lx + (Math.random() - 0.5) * scatter,
+          y: ld.ly + Math.random() * scatter,
+          z: this.y + ld.lz + (Math.random() - 0.5) * scatter,
+          r: c.r * (1 - t), g: c.g * (1 - t), b: c.b * (1 - t),
+          size: 2.0 * (1 - t),
+        });
+      }
+      EntityDots.submit(dots);
+      return;
+    }
+
+    // Normal: render entity as dot cloud
+    const c = new THREE.Color(this.hitFlash > 0 ? '#fff' : this.color);
+    const t = Date.now() / 1000;
+    const breath = 1 + Math.sin(t * 2.2 + this.phaseTimer) * 0.06;
+    const dots = [];
+    for (const ld of this._bodyDots) {
+      dots.push({
+        x: this.x + ld.lx, y: ld.ly * breath, z: this.y + ld.lz,
+        r: c.r, g: c.g, b: c.b, size: 2.2,
       });
     }
+    EntityDots.submit(dots);
 
-    // Hit flash
-    const mainMat = this.mesh.userData.mainMat;
-    if (mainMat) {
-      if (this.hitFlash > 0) {
-        mainMat.color.set('#fff');
-      } else {
-        mainMat.color.set(this.color);
-      }
-    }
-
-    // HP bar
+    // HP bar (keep as 3D mesh — it's UI, not entity body)
     if (this.hpBar) {
       if (this.hp < this.maxHp && !this.isBoss && !this.isFake && !this.dying) {
         this.hpBar.visible = true;
@@ -1447,24 +1550,20 @@ class Enemy {
       }
     }
 
-    // Stun ring
-    if (this.stunned && !this.stunRing) {
-      this.stunRing = Models.createStunRing();
-      Renderer.addToScene(this.stunRing);
-    }
-    if (this.stunRing) {
-      if (this.stunned) {
-        this.stunRing.visible = true;
-        this.stunRing.position.set(this.x, 2, this.y);
-        const scale = (this.radius + 8) / 18;
-        this.stunRing.scale.set(scale, 1, scale);
-      } else {
-        this.stunRing.visible = false;
+    // Stun ring as dot ring
+    if (this.stunRing) this.stunRing.visible = false;
+    if (this.stunned) {
+      const stunDots = [];
+      const sr = this.radius + 8;
+      for (let i = 0; i < 12; i++) {
+        const a = (Math.PI * 2 / 12) * i + t * 3;
+        stunDots.push({
+          x: this.x + Math.cos(a) * sr, y: 3, z: this.y + Math.sin(a) * sr,
+          r: 0.67, g: 0, b: 1, size: 2.0,
+        });
       }
+      EntityDots.submit(stunDots);
     }
-
-    // Face player direction
-    this.mesh.rotation.y = -this.angle;
   }
 
   destroy() {

@@ -25,6 +25,7 @@ const Game = {
     Input.init(Renderer.renderer.domElement);
     Audio.init();
     Particles.init();
+    EntityDots.init();
 
     // Create crosshair (always visible during gameplay)
     this.crosshair = Models.createCrosshair();
@@ -123,9 +124,11 @@ const Game = {
 
     // Render 3D scene
     if (this.state === 'playing' || this.state === 'gameover') {
-      // Sync all 3D meshes
+      // Sync all meshes + entity dot clouds
+      EntityDots.beginFrame();
       if (this.player) this.player.updateMesh();
       if (this.waveManager) this.waveManager.updateMeshes();
+      EntityDots.render();
       Particles.update(gameDt);
       Camera.apply();
 
