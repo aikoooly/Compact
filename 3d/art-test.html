@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>COMPACTING — Art Style Test</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&display=swap" rel="stylesheet">
+  <script src="three.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #111;
+      font-family: 'DM Mono', monospace;
+      color: #ccc;
+      overflow: hidden;
+      display: flex;
+    }
+    #viewport {
+      flex: 1;
+      height: 100vh;
+    }
+    #viewport canvas { display: block; width: 100%; height: 100%; }
+
+    /* Control panel */
+    #panel {
+      width: 320px;
+      height: 100vh;
+      overflow-y: auto;
+      background: #1a1a2e;
+      padding: 16px;
+      font-size: 12px;
+      z-index: 10;
+      border-left: 1px solid #333;
+    }
+    #panel h2 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 24px;
+      color: #1b7ed6;
+      margin-bottom: 12px;
+      letter-spacing: 2px;
+    }
+    #panel h3 {
+      font-size: 13px;
+      color: #888;
+      margin: 16px 0 6px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 4px;
+      text-transform: uppercase;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      margin: 4px 0;
+      gap: 8px;
+    }
+    .row label {
+      flex: 0 0 110px;
+      color: #aaa;
+      font-size: 11px;
+    }
+    .row input[type="range"] {
+      flex: 1;
+      accent-color: #1b7ed6;
+    }
+    .row input[type="color"] {
+      width: 28px; height: 22px;
+      border: 1px solid #444;
+      background: none;
+      cursor: pointer;
+    }
+    .row input[type="checkbox"] {
+      accent-color: #1b7ed6;
+    }
+    .row select {
+      flex: 1;
+      background: #222;
+      color: #ccc;
+      border: 1px solid #444;
+      padding: 2px 4px;
+      font-family: inherit;
+      font-size: 11px;
+    }
+    .val {
+      width: 36px;
+      text-align: right;
+      color: #666;
+      font-size: 10px;
+    }
+    #status {
+      margin-top: 12px;
+      padding: 8px;
+      background: #222;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #666;
+    }
+    button {
+      padding: 6px 14px;
+      background: #1b7ed6;
+      color: #fff;
+      border: none;
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      margin: 4px 4px 4px 0;
+      border-radius: 3px;
+    }
+    button:hover { background: #1565b8; }
+    button.secondary { background: #444; }
+    button.secondary:hover { background: #555; }
+  </style>
+</head>
+<body>
+  <div id="viewport"></div>
+  <div id="panel">
+    <h2>ART STYLE LAB</h2>
+    <div style="margin-bottom:12px;">
+      <button onclick="ArtTest.exportConfig()">Export Config</button>
+      <button class="secondary" onclick="ArtTest.resetDefaults()">Reset</button>
+    </div>
+
+    <h3>Scene</h3>
+    <div class="row"><label>Background</label><input type="color" id="cfg-scene-bg" value="#dce8f8"></div>
+    <div class="row"><label>Fog</label><input type="checkbox" id="cfg-scene-fog"><label>Near</label><input type="range" id="cfg-scene-fogNear" min="50" max="800" value="400"><span class="val" id="v-fogNear">400</span></div>
+
+    <h3>Camera</h3>
+    <div class="row"><label>Frustum</label><input type="range" id="cfg-cam-frustum" min="200" max="1000" value="500"><span class="val" id="v-frustum">500</span></div>
+    <div class="row"><label>Height</label><input type="range" id="cfg-cam-height" min="200" max="1200" value="600"><span class="val" id="v-camH">600</span></div>
+    <div class="row"><label>Depth</label><input type="range" id="cfg-cam-depth" min="100" max="800" value="400"><span class="val" id="v-camD">400</span></div>
+
+    <h3>Lighting</h3>
+    <div class="row"><label>Ambient</label><input type="color" id="cfg-light-ambient" value="#ffffff"><input type="range" id="cfg-light-ambientI" min="0" max="200" value="60"><span class="val" id="v-ambI">0.6</span></div>
+    <div class="row"><label>Hemi Sky</label><input type="color" id="cfg-light-hemiSky" value="#dce8f8"><input type="range" id="cfg-light-hemiI" min="0" max="200" value="30"><span class="val" id="v-hemiI">0.3</span></div>
+    <div class="row"><label>Dir Light</label><input type="color" id="cfg-light-dir" value="#ffffff"><input type="range" id="cfg-light-dirI" min="0" max="200" value="90"><span class="val" id="v-dirI">0.9</span></div>
+    <div class="row"><label>Dir X/Y/Z</label><input type="range" id="cfg-light-dirX" min="-600" max="600" value="300"><input type="range" id="cfg-light-dirY" min="100" max="1000" value="500"><input type="range" id="cfg-light-dirZ" min="-600" max="600" value="200"></div>
+    <div class="row"><label>Shadows</label><input type="checkbox" id="cfg-light-shadow" checked></div>
+
+    <h3>Toon Shading</h3>
+    <div class="row"><label>Enabled</label><input type="checkbox" id="cfg-toon-on" checked></div>
+    <div class="row"><label>Shadow</label><input type="range" id="cfg-toon-s0" min="0" max="255" value="80"><span class="val" id="v-t0">80</span></div>
+    <div class="row"><label>Mid</label><input type="range" id="cfg-toon-s1" min="0" max="255" value="160"><span class="val" id="v-t1">160</span></div>
+    <div class="row"><label>Lit</label><input type="range" id="cfg-toon-s2" min="0" max="255" value="220"><span class="val" id="v-t2">220</span></div>
+
+    <h3>Materials</h3>
+    <div class="row"><label>Player Color</label><input type="color" id="cfg-mat-player" value="#44ffff"></div>
+    <div class="row"><label>Floor Color</label><input type="color" id="cfg-mat-floor" value="#dce8f8"></div>
+    <div class="row"><label>Floor Type</label>
+      <select id="cfg-mat-floorType"><option>lambert</option><option>toon</option><option>standard</option><option>basic</option></select>
+    </div>
+
+    <h3>Renderer</h3>
+    <div class="row"><label>Tone Mapping</label>
+      <select id="cfg-rend-tone"><option value="none">None</option><option value="aces">ACES</option><option value="reinhard">Reinhard</option><option value="cineon">Cineon</option></select>
+    </div>
+    <div class="row"><label>Exposure</label><input type="range" id="cfg-rend-exposure" min="10" max="300" value="100"><span class="val" id="v-exposure">1.0</span></div>
+
+    <div id="status">Drag sliders to preview changes in real-time.</div>
+  </div>
+
+  <script src="js/art-config.js?v=1"></script>
+  <script>
+  // ============================================================
+  // Art Test Scene — isolated sandbox for visual experiments
+  // ============================================================
+  const ArtTest = {
+    scene: null, camera: null, renderer: null,
+    ambientLight: null, hemiLight: null, dirLight: null,
+    gradientMap: null,
+    playerMesh: null, enemyMeshes: [], floorMesh: null,
+    effectMesh: null, effectParticles: [],
+    time: 0,
+
+    init() {
+      const container = document.getElementById('viewport');
+
+      // Scene
+      this.scene = new THREE.Scene();
+      this.scene.background = new THREE.Color(ArtConfig.scene.bgColor);
+
+      // Camera
+      const w = container.clientWidth, h = container.clientHeight;
+      const a = w / h, f = ArtConfig.camera.frustum;
+      this.camera = new THREE.OrthographicCamera(-f*a, f*a, f, -f, 1, 2000);
+      this.camera.position.set(0, ArtConfig.camera.height, ArtConfig.camera.depth);
+      this.camera.lookAt(0, 0, 0);
+
+      // Renderer
+      this.renderer = new THREE.WebGLRenderer({ antialias: true });
+      this.renderer.setSize(w, h);
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      container.appendChild(this.renderer.domElement);
+
+      window.addEventListener('resize', () => {
+        const w2 = container.clientWidth, h2 = container.clientHeight;
+        const a2 = w2/h2, f2 = parseFloat(document.getElementById('cfg-cam-frustum').value);
+        this.camera.left = -f2*a2; this.camera.right = f2*a2;
+        this.camera.top = f2; this.camera.bottom = -f2;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(w2, h2);
+      });
+
+      // Gradient map
+      this._rebuildGradientMap();
+
+      // Lights
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      this.scene.add(this.ambientLight);
+      this.hemiLight = new THREE.HemisphereLight(0xdce8f8, 0x8899aa, 0.3);
+      this.scene.add(this.hemiLight);
+      this.dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+      this.dirLight.position.set(300, 500, 200);
+      this.dirLight.castShadow = true;
+      this.dirLight.shadow.mapSize.set(2048, 2048);
+      this.dirLight.shadow.camera.left = -400; this.dirLight.shadow.camera.right = 400;
+      this.dirLight.shadow.camera.top = 400; this.dirLight.shadow.camera.bottom = -400;
+      this.dirLight.shadow.bias = -0.002;
+      this.scene.add(this.dirLight);
+
+      // Build test objects
+      this._buildScene();
+
+      // Bind controls
+      this._bindControls();
+
+      // Loop
+      const animate = () => {
+        this.time += 0.016;
+        this._updateEffects();
+        this.renderer.render(this.scene, this.camera);
+        requestAnimationFrame(animate);
+      };
+      // Also use setInterval fallback
+      setInterval(() => {
+        this.time += 0.016;
+        this._updateEffects();
+        this.renderer.render(this.scene, this.camera);
+      }, 16);
+      animate();
+    },
+
+    _rebuildGradientMap() {
+      const s = ArtConfig.toon.gradientSteps;
+      const colors = new Uint8Array([s[0], s[1], s[2], s[3]]);
+      this.gradientMap = new THREE.DataTexture(colors, 4, 1, THREE.RedFormat);
+      this.gradientMap.minFilter = THREE.NearestFilter;
+      this.gradientMap.magFilter = THREE.NearestFilter;
+      this.gradientMap.needsUpdate = true;
+    },
+
+    _makeToon(color) {
+      if (!ArtConfig.toon.enabled) {
+        return new THREE.MeshLambertMaterial({ color: new THREE.Color(color) });
+      }
+      return new THREE.MeshToonMaterial({
+        color: new THREE.Color(color),
+        gradientMap: this.gradientMap,
+      });
+    },
+
+    _buildScene() {
+      // --- Floor (terrain sample) ---
+      const floorGeo = new THREE.PlaneGeometry(600, 600);
+      const floorMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(ArtConfig.materials.floorColor) });
+      this.floorMesh = new THREE.Mesh(floorGeo, floorMat);
+      this.floorMesh.rotation.x = -Math.PI / 2;
+      this.floorMesh.position.y = -0.5;
+      this.floorMesh.receiveShadow = true;
+      this.scene.add(this.floorMesh);
+
+      // Grid
+      const grid = new THREE.GridHelper(600, 10, 0x1b7ed6, 0x1b7ed6);
+      grid.material.opacity = 0.05; grid.material.transparent = true;
+      this.scene.add(grid);
+
+      // --- Player Character ---
+      const pGroup = new THREE.Group();
+      const pMat = this._makeToon(ArtConfig.materials.playerColor);
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(7, 10, 24, 8), pMat);
+      body.position.y = 12; body.castShadow = true; pGroup.add(body);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(7, 8, 6), pMat);
+      head.position.y = 30; head.castShadow = true; pGroup.add(head);
+      const eyeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(ArtConfig.materials.playerEyeColor) });
+      const eyeGeo = new THREE.SphereGeometry(1.5, 4, 4);
+      pGroup.add(new THREE.Mesh(eyeGeo, eyeMat).translateX(5).translateY(31));
+      const eyeR = new THREE.Mesh(eyeGeo, eyeMat); eyeR.position.set(5, 31, 3); pGroup.add(eyeR);
+      const eyeL = new THREE.Mesh(eyeGeo, eyeMat); eyeL.position.set(5, 31, -3); pGroup.add(eyeL);
+      pGroup.position.set(0, 0, 0);
+      this.scene.add(pGroup);
+      this.playerMesh = pGroup;
+      this.playerMat = pMat;
+
+      // --- Sample Enemies ---
+      // Heart
+      const heartMat = this._makeToon('#a050e0');
+      const heartGeo = new THREE.SphereGeometry(12, 8, 6);
+      const heart = new THREE.Mesh(heartGeo, heartMat);
+      heart.position.set(-80, 12, -40); heart.castShadow = true;
+      this.scene.add(heart); this.enemyMeshes.push(heart);
+
+      // Spider
+      const spiderGroup = new THREE.Group();
+      const spiderMat = this._makeToon('#555');
+      const spiderBody = new THREE.Mesh(new THREE.SphereGeometry(8, 8, 6), spiderMat);
+      spiderBody.position.y = 8; spiderBody.castShadow = true; spiderGroup.add(spiderBody);
+      const legMat = new THREE.LineBasicMaterial({ color: 0x555555 });
+      for (let i = 0; i < 8; i++) {
+        const a = (Math.PI * 2 / 8) * i;
+        const pts = [
+          new THREE.Vector3(Math.cos(a)*6, 8, Math.sin(a)*6),
+          new THREE.Vector3(Math.cos(a)*12, 14, Math.sin(a)*12),
+          new THREE.Vector3(Math.cos(a)*20, 2, Math.sin(a)*20),
+        ];
+        spiderGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), legMat));
+      }
+      spiderGroup.position.set(80, 0, -30);
+      this.scene.add(spiderGroup); this.enemyMeshes.push(spiderGroup);
+
+      // Scarecrow
+      const scGroup = new THREE.Group();
+      const scMat = this._makeToon('#a86');
+      scGroup.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(4, 40, 4), scMat), { position: new THREE.Vector3(0, 20, 0) }));
+      scGroup.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(35, 4, 4), scMat), { position: new THREE.Vector3(0, 32, 0) }));
+      const scHead = new THREE.Mesh(new THREE.SphereGeometry(8, 6, 6), this._makeToon('#c8a840'));
+      scHead.position.y = 46; scGroup.add(scHead);
+      scGroup.position.set(0, 0, -100);
+      scGroup.children.forEach(c => c.castShadow = true);
+      this.scene.add(scGroup); this.enemyMeshes.push(scGroup);
+
+      // --- Skill Effect (melee arc + particles placeholder) ---
+      const arcGeo = new THREE.RingGeometry(20, 80, 16, 1, -0.4, 0.8);
+      const arcMat = new THREE.MeshBasicMaterial({ color: 0xff8800, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+      this.effectMesh = new THREE.Mesh(arcGeo, arcMat);
+      this.effectMesh.rotation.x = -Math.PI / 2;
+      this.effectMesh.position.set(50, 2, 50);
+      this.scene.add(this.effectMesh);
+
+      // Floating particles
+      const pGeo = new THREE.BufferGeometry();
+      const pPositions = new Float32Array(100 * 3);
+      for (let i = 0; i < 100; i++) {
+        pPositions[i*3] = (Math.random()-0.5)*200;
+        pPositions[i*3+1] = Math.random()*30 + 5;
+        pPositions[i*3+2] = (Math.random()-0.5)*200;
+      }
+      pGeo.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
+      const pMat2 = new THREE.PointsMaterial({ color: 0x1b7ed6, size: 3, transparent: true, opacity: 0.5 });
+      this.particlePoints = new THREE.Points(pGeo, pMat2);
+      this.scene.add(this.particlePoints);
+    },
+
+    _updateEffects() {
+      // Rotate skill effect
+      if (this.effectMesh) {
+        this.effectMesh.rotation.z = this.time * 2;
+        this.effectMesh.material.opacity = 0.3 + Math.sin(this.time * 4) * 0.2;
+      }
+      // Bob enemies
+      for (const e of this.enemyMeshes) {
+        e.position.y = (e.position.y > 5 ? e.position.y : 0) + Math.sin(this.time * 2 + e.position.x) * 0.5;
+      }
+      // Rotate particles slowly
+      if (this.particlePoints) {
+        this.particlePoints.rotation.y = this.time * 0.1;
+      }
+    },
+
+    // ── Live control binding ──
+    _bindControls() {
+      const self = this;
+      const $ = id => document.getElementById(id);
+
+      // Helper: bind range + value display
+      function bindRange(id, valId, apply) {
+        const el = $(id);
+        if (!el) return;
+        el.addEventListener('input', () => {
+          if (valId) $(valId).textContent = el.value;
+          apply(parseFloat(el.value));
+        });
+      }
+
+      // Scene bg
+      $('cfg-scene-bg').addEventListener('input', function() {
+        self.scene.background = new THREE.Color(this.value);
+      });
+
+      // Fog
+      $('cfg-scene-fog').addEventListener('change', function() {
+        if (this.checked) {
+          self.scene.fog = new THREE.Fog(
+            new THREE.Color($('cfg-scene-bg').value),
+            parseFloat($('cfg-scene-fogNear').value), 1200
+          );
+        } else {
+          self.scene.fog = null;
+        }
+      });
+      bindRange('cfg-scene-fogNear', 'v-fogNear', v => {
+        if (self.scene.fog) self.scene.fog.near = v;
+      });
+
+      // Camera
+      bindRange('cfg-cam-frustum', 'v-frustum', v => {
+        const a = self.renderer.domElement.width / self.renderer.domElement.height;
+        self.camera.left = -v*a; self.camera.right = v*a;
+        self.camera.top = v; self.camera.bottom = -v;
+        self.camera.updateProjectionMatrix();
+      });
+      bindRange('cfg-cam-height', 'v-camH', v => {
+        self.camera.position.y = v;
+        self.camera.lookAt(0, 0, 0);
+      });
+      bindRange('cfg-cam-depth', 'v-camD', v => {
+        self.camera.position.z = v;
+        self.camera.lookAt(0, 0, 0);
+      });
+
+      // Lighting
+      $('cfg-light-ambient').addEventListener('input', function() { self.ambientLight.color.set(this.value); });
+      bindRange('cfg-light-ambientI', 'v-ambI', v => { self.ambientLight.intensity = v/100; $('v-ambI').textContent = (v/100).toFixed(1); });
+      $('cfg-light-hemiSky').addEventListener('input', function() { self.hemiLight.color.set(this.value); });
+      bindRange('cfg-light-hemiI', 'v-hemiI', v => { self.hemiLight.intensity = v/100; $('v-hemiI').textContent = (v/100).toFixed(1); });
+      $('cfg-light-dir').addEventListener('input', function() { self.dirLight.color.set(this.value); });
+      bindRange('cfg-light-dirI', 'v-dirI', v => { self.dirLight.intensity = v/100; $('v-dirI').textContent = (v/100).toFixed(1); });
+      $('cfg-light-dirX').addEventListener('input', function() { self.dirLight.position.x = parseFloat(this.value); });
+      $('cfg-light-dirY').addEventListener('input', function() { self.dirLight.position.y = parseFloat(this.value); });
+      $('cfg-light-dirZ').addEventListener('input', function() { self.dirLight.position.z = parseFloat(this.value); });
+      $('cfg-light-shadow').addEventListener('change', function() { self.dirLight.castShadow = this.checked; });
+
+      // Toon
+      const rebuildToon = () => {
+        ArtConfig.toon.gradientSteps = [
+          parseInt($('cfg-toon-s0').value),
+          parseInt($('cfg-toon-s1').value),
+          parseInt($('cfg-toon-s2').value),
+          255,
+        ];
+        self._rebuildGradientMap();
+        // Refresh toon materials
+        self.scene.traverse(child => {
+          if (child.material && child.material.isMeshToonMaterial) {
+            child.material.gradientMap = self.gradientMap;
+            child.material.needsUpdate = true;
+          }
+        });
+      };
+      bindRange('cfg-toon-s0', 'v-t0', rebuildToon);
+      bindRange('cfg-toon-s1', 'v-t1', rebuildToon);
+      bindRange('cfg-toon-s2', 'v-t2', rebuildToon);
+
+      // Materials
+      $('cfg-mat-player').addEventListener('input', function() {
+        self.playerMat.color.set(this.value);
+      });
+      $('cfg-mat-floor').addEventListener('input', function() {
+        self.floorMesh.material.color.set(this.value);
+      });
+
+      // Renderer
+      $('cfg-rend-tone').addEventListener('change', function() {
+        const map = { none: THREE.NoToneMapping, aces: THREE.ACESFilmicToneMapping, reinhard: THREE.ReinhardToneMapping, cineon: THREE.CineonToneMapping };
+        self.renderer.toneMapping = map[this.value] || THREE.NoToneMapping;
+      });
+      bindRange('cfg-rend-exposure', 'v-exposure', v => {
+        self.renderer.toneMappingExposure = v / 100;
+        $('v-exposure').textContent = (v/100).toFixed(1);
+      });
+    },
+
+    // ── Export current settings as JSON ──
+    exportConfig() {
+      const $ = id => document.getElementById(id);
+      const cfg = {
+        scene: { bgColor: $('cfg-scene-bg').value },
+        camera: { frustum: +$('cfg-cam-frustum').value, height: +$('cfg-cam-height').value, depth: +$('cfg-cam-depth').value },
+        lighting: {
+          ambientColor: $('cfg-light-ambient').value, ambientIntensity: +$('cfg-light-ambientI').value/100,
+          hemiSkyColor: $('cfg-light-hemiSky').value, hemiIntensity: +$('cfg-light-hemiI').value/100,
+          dirColor: $('cfg-light-dir').value, dirIntensity: +$('cfg-light-dirI').value/100,
+          dirPosition: [+$('cfg-light-dirX').value, +$('cfg-light-dirY').value, +$('cfg-light-dirZ').value],
+          dirShadow: $('cfg-light-shadow').checked,
+        },
+        toon: { enabled: $('cfg-toon-on').checked, gradientSteps: [+$('cfg-toon-s0').value, +$('cfg-toon-s1').value, +$('cfg-toon-s2').value, 255] },
+        materials: { playerColor: $('cfg-mat-player').value, floorColor: $('cfg-mat-floor').value },
+        renderer: { toneMapping: $('cfg-rend-tone').value, toneMappingExposure: +$('cfg-rend-exposure').value/100 },
+      };
+      const json = JSON.stringify(cfg, null, 2);
+      navigator.clipboard.writeText(json).then(() => {
+        document.getElementById('status').textContent = 'Config copied to clipboard!';
+      }).catch(() => {
+        document.getElementById('status').textContent = json;
+      });
+    },
+
+    resetDefaults() {
+      window.location.reload();
+    },
+  };
+
+  window.addEventListener('load', () => ArtTest.init());
+  </script>
+</body>
+</html>
