@@ -56,17 +56,15 @@ class Arena {
       Math.max(this.width, this.height) / this.gridSize,
       0x1b7ed6, 0x1b7ed6
     );
-    gridHelper.material.opacity = 0.18;
+    gridHelper.material.opacity = 0.08; // raw-mode reference only; invisible to the ASCII pass
     gridHelper.material.transparent = true;
     gridHelper.position.y = 0;
     this.group.add(gridHelper);
 
-    const crossMat = new THREE.MeshBasicMaterial({
-      color: 0x4a90d6, transparent: true, opacity: 0.8,
-    });
+    const crossMat = new THREE.MeshBasicMaterial({ color: 0x2a6cb8 });
     const crossStep = 120;
-    const crossA = new THREE.BoxGeometry(7, 0.8, 2);
-    const crossB = new THREE.BoxGeometry(2, 0.8, 7);
+    const crossA = new THREE.BoxGeometry(10, 0.8, 2.6);
+    const crossB = new THREE.BoxGeometry(2.6, 0.8, 10);
     for (let gx = this.left + crossStep; gx < this.right; gx += crossStep) {
       for (let gz = this.top + crossStep; gz < this.bottom; gz += crossStep) {
         const a = new THREE.Mesh(crossA, crossMat);

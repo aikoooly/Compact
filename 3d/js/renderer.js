@@ -251,8 +251,10 @@ const Renderer = {
 
         // Paper culling: bright low-saturation surfaces (the pale floor) carry
         // no ink — entities (saturated) and shadows (dark) keep theirs.
-        float colored = smoothstep(0.18, 0.32, sat);
-        float darkness = smoothstep(0.3, 0.55, 1.0 - L);
+        // Wide thresholds: the floor must sit FAR below the cutoff on every
+        // display pipeline, or it dissolves into eye-straining noise.
+        float colored = smoothstep(0.3, 0.45, sat);
+        float darkness = smoothstep(0.42, 0.65, 1.0 - L);
         ink *= max(colored, darkness);
 
         // --- edge detection (luminance sobel at cell scale) → crisper silhouettes
@@ -261,11 +263,12 @@ const Renderer = {
         float lR = lum(texture2D(tDiffuse, cellCenterUv + vec2(e.x, 0.0)).rgb);
         float lU = lum(texture2D(tDiffuse, cellCenterUv + vec2(0.0, e.y)).rgb);
         float lD = lum(texture2D(tDiffuse, cellCenterUv - vec2(0.0, e.y)).rgb);
-        float edge = clamp((abs(lR - lL) + abs(lU - lD)) * 2.2, 0.0, 1.0);
-        ink = max(ink, edge * 0.85);
+        // small bias so faint lines (thin grid) don't fire the edge detector
+        float edge = clamp((abs(lR - lL) + abs(lU - lD)) * 2.2 - 0.08, 0.0, 1.0);
+        ink = max(ink, edge * 0.7);
 
-        // per-cell dither breaks banding
-        ink += (hash(cell) - 0.5) * 0.06;
+        // per-cell dither breaks banding (kept small — it must never read as noise)
+        ink += (hash(cell) - 0.5) * 0.03;
         // distance fade — background characters dissolve toward the screen edges,
         // like memory losing focus at the periphery
         float edgeDist = length(vUv - 0.5);
@@ -289,7 +292,7 @@ const Renderer = {
 
         // faint ambient grid glyphs on empty floor
         float floorGlyph = step(0.93, hash(cell + floor(time * 0.2))) * 0.05;
-        float inkVis = smoothstep(0.07, 0.16, ink);
+        float inkVis = smoothstep(0.1, 0.2, ink);
 
         vec3 col = mix(bgColor, gCol, glyph * max(inkVis, floorGlyph));
 
