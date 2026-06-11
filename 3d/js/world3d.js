@@ -39,24 +39,44 @@ class Arena {
     outer.receiveShadow = true;
     this.group.add(outer);
 
-    // Arena floor — slightly deeper blue so the playfield reads through the ASCII filter
-    const floorMat = new THREE.MeshLambertMaterial({ color: new THREE.Color('#c9dcf4') });
+    // Arena floor — slightly deeper than outside, but light enough to stay
+    // below the ASCII ink threshold (texture comes from grid + borders, not noise)
+    const floorMat = new THREE.MeshLambertMaterial({ color: new THREE.Color('#d9e4f6') });
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(this.width, this.height), floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -0.5;
     floor.receiveShadow = true;
     this.group.add(floor);
 
-    // Grid — visible accent lines inside the arena
+    // Grid — faint lines (visible in raw mode) + chunky blueprint crosses at
+    // intersections. Thin lines dissolve under ASCII cell-sampling; the
+    // crosses are sized to register as single accent glyphs.
     const gridHelper = new THREE.GridHelper(
       Math.max(this.width, this.height),
       Math.max(this.width, this.height) / this.gridSize,
       0x1b7ed6, 0x1b7ed6
     );
-    gridHelper.material.opacity = 0.55;
+    gridHelper.material.opacity = 0.18;
     gridHelper.material.transparent = true;
     gridHelper.position.y = 0;
     this.group.add(gridHelper);
+
+    const crossMat = new THREE.MeshBasicMaterial({
+      color: 0x4a90d6, transparent: true, opacity: 0.8,
+    });
+    const crossStep = 120;
+    const crossA = new THREE.BoxGeometry(7, 0.8, 2);
+    const crossB = new THREE.BoxGeometry(2, 0.8, 7);
+    for (let gx = this.left + crossStep; gx < this.right; gx += crossStep) {
+      for (let gz = this.top + crossStep; gz < this.bottom; gz += crossStep) {
+        const a = new THREE.Mesh(crossA, crossMat);
+        a.position.set(gx, 0.8, gz);
+        this.group.add(a);
+        const b = new THREE.Mesh(crossB, crossMat);
+        b.position.set(gx, 0.8, gz);
+        this.group.add(b);
+      }
+    }
 
     // Glowing border frame — thin accent bars marking the walls
     const borderMat = new THREE.MeshBasicMaterial({
@@ -72,6 +92,16 @@ class Arena {
     mkBar(this.width + bt * 2, bt, 0, this.bottom + bt / 2);
     mkBar(bt, this.height, this.left - bt / 2, 0);
     mkBar(bt, this.height, this.right + bt / 2, 0);
+
+    // Data pulses — bright segments cycling along the border bars.
+    // They live in the ASCII pass, so they read as flowing character runs.
+    this._pulses = [];
+    const pulseMat = new THREE.MeshBasicMaterial({ color: 0x9fd0ff });
+    for (let i = 0; i < 4; i++) {
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(1, 7, 1), pulseMat);
+      this.group.add(seg);
+      this._pulses.push({ mesh: seg, t: i * 0.25, speed: 0.06 + i * 0.012 });
+    }
 
     // Corner pillars — small glowing columns
     const pillarMat = new THREE.MeshBasicMaterial({
@@ -169,6 +199,21 @@ class Arena {
       p.x += p.vx * dt; p.y += p.vy * dt;
       if (p.x < this.left || p.x > this.right) p.vx *= -1;
       if (p.y < this.top || p.y > this.bottom) p.vy *= -1;
+    }
+    // Walk the data pulses around the border perimeter
+    if (this._pulses) {
+      const perim = 2 * (this.width + this.height);
+      for (const p of this._pulses) {
+        p.t = (p.t + dt * p.speed) % 1;
+        const d = p.t * perim;
+        let x, z, sx, sz;
+        if (d < this.width) { x = this.left + d; z = this.top; sx = 26; sz = 3.5; }
+        else if (d < this.width + this.height) { x = this.right; z = this.top + (d - this.width); sx = 3.5; sz = 26; }
+        else if (d < 2 * this.width + this.height) { x = this.right - (d - this.width - this.height); z = this.bottom; sx = 26; sz = 3.5; }
+        else { x = this.left; z = this.bottom - (d - 2 * this.width - this.height); sx = 3.5; sz = 26; }
+        p.mesh.position.set(x, 4, z);
+        p.mesh.scale.set(sx, 1, sz);
+      }
     }
     this._updateGlitch(dt);
   }

@@ -530,7 +530,7 @@ const Particles = {
         void main() {
           vColor = color;
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = size * 2.2;
+          gl_PointSize = size * 3.4; // sized so each particle covers an ASCII cell
           gl_Position = projectionMatrix * mv;
         }
       `,

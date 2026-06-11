@@ -1003,6 +1003,12 @@ class Player {
       ud.inner.scale.x = lerp(ud.inner.scale.x, stretch, 0.3);
       ud.inner.scale.y = lerp(ud.inner.scale.y, this.dashing ? 0.92 : 1, 0.3);
       ud.inner.position.y = moving ? Math.abs(Math.sin(phase)) * 1.6 : Math.sin(tNow * 2) * 0.8;
+
+      // Hologram breathing — visor / chest core pulse softly
+      if (ud.glowMat) {
+        const p = 0.5 + Math.sin(tNow * 2.6) * 0.5;
+        ud.glowMat.color.setRGB(0.17 + 0.3 * p, 0.61 + 0.22 * p, 0.94);
+      }
     }
 
     // Weapon prop in right hand (katana / rifle / darts / hook launcher)
@@ -1464,6 +1470,8 @@ class Enemy {
 
   die() {
     this.dying = true; this.dyingTimer = 0.3; this.dyingMax = 0.3; this.vx = 0; this.vy = 0;
+    // Dissolve back into ASCII — the memory decompiles into characters
+    if (this.mesh) { Renderer.moveToBackground(this.mesh); this._inAsciiLayer = true; }
     Audio.enemyDie(); Effects.slowMotion(0.3, 0.05);
     Shockwaves.spawn(this.x, this.y, {
       radius: this.isBoss ? 220 : this.radius * 4,
@@ -1506,14 +1514,20 @@ class Enemy {
     // Position
     this.mesh.position.set(this.x, 0, this.y);
 
-    // Spawn animation — pop with overshoot (easeOutBack)
+    // Spawn animation — materializes from ASCII (renders through the bg
+    // shader while spawning), pops with overshoot, then turns crisp 3D
     if (this.spawnTimer > 0) {
+      if (!this._inAsciiLayer) { Renderer.moveToBackground(this.mesh); this._inAsciiLayer = true; }
       const t = 1 - this.spawnTimer / 0.4;
       const c1 = 1.70158, c3 = c1 + 1;
       const s = 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
       this.mesh.scale.setScalar(Math.max(0.01, s));
       return;
     } else {
+      if (this._inAsciiLayer && !this.dying) {
+        Renderer.moveToForeground(this.mesh);
+        this._inAsciiLayer = false;
+      }
       // Breathing
       const t = Date.now() / 1000;
       const breath = 1 + Math.sin(t * 2.2 + this.phaseTimer) * 0.08;
@@ -1575,13 +1589,37 @@ class Enemy {
       if (ud.spinPart) ud.spinPart.rotation.y += 0.05;
     }
 
-    // Hit flash
+    // Hit feedback — hologram interference: pale-blue tint, opacity flicker,
+    // horizontal signal tear (replaces the old plain white flash)
     const mainMat = this.mesh.userData.mainMat;
     if (mainMat) {
       if (this.hitFlash > 0) {
-        mainMat.color.set('#fff');
+        mainMat.color.set('#bfe2ff');
+        const flick = 0.5 + Math.abs(Math.sin(Date.now() / 22)) * 0.4;
+        this.mesh.traverse(c => {
+          if (c.material && c.material.opacity !== undefined) {
+            if (c.material.userData._baseOpacity === undefined) {
+              c.material.userData._baseOpacity = c.material.opacity;
+              c.material.userData._baseTransparent = c.material.transparent;
+            }
+            c.material.transparent = true;
+            c.material.opacity = c.material.userData._baseOpacity * flick;
+          }
+        });
+        this.mesh.position.x = this.x + (Math.random() - 0.5) * 7;
+        this.mesh.position.z = this.y + (Math.random() - 0.5) * 3;
+        this._holoTorn = true;
       } else {
         mainMat.color.set(this.color);
+        if (this._holoTorn) {
+          this._holoTorn = false;
+          this.mesh.traverse(c => {
+            if (c.material && c.material.userData._baseOpacity !== undefined) {
+              c.material.opacity = c.material.userData._baseOpacity;
+              c.material.transparent = c.material.userData._baseTransparent;
+            }
+          });
+        }
       }
     }
 

@@ -101,7 +101,7 @@ const Renderer = {
     this.scene.add(hemi);
     this._hemi = hemi;
 
-    const dir = new THREE.DirectionalLight(0xffffff, 0.52);
+    const dir = new THREE.DirectionalLight(0xeaf2ff, 0.52); // cool blue-white key light
     dir.position.set(300, 500, 200);
     dir.castShadow = true;
     dir.shadow.mapSize.width = 2048;
@@ -160,6 +160,11 @@ const Renderer = {
       this.width * pr, this.height * pr,
       { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat }
     );
+    // Separate target for the crisp entity pass (alpha = coverage)
+    this._entityTarget = new THREE.WebGLRenderTarget(
+      this.width * pr, this.height * pr,
+      { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat }
+    );
 
     const cellW = 7, cellH = 11; // device px per ASCII cell (chars taller than wide)
     this._glyphAtlas = this._buildGlyphAtlas(16, 24);
@@ -170,6 +175,8 @@ const Renderer = {
 
     this._asciiUniforms = {
       tDiffuse:   { value: this._sceneTarget.texture },
+      tEntity:    { value: this._entityTarget.texture },
+      entityMix:  { value: 0 },
       tGlyph:     { value: this._glyphAtlas },
       resolution: { value: new THREE.Vector2(this.width * pr, this.height * pr) },
       cellSize:   { value: new THREE.Vector2(cellW * pr, cellH * pr) },
@@ -193,6 +200,8 @@ const Renderer = {
     const frag = `
       precision highp float;
       uniform sampler2D tDiffuse;
+      uniform sampler2D tEntity;
+      uniform float entityMix;
       uniform sampler2D tGlyph;
       uniform vec2 resolution;
       uniform vec2 cellSize;
@@ -257,6 +266,10 @@ const Renderer = {
 
         // per-cell dither breaks banding
         ink += (hash(cell) - 0.5) * 0.06;
+        // distance fade — background characters dissolve toward the screen edges,
+        // like memory losing focus at the periphery
+        float edgeDist = length(vUv - 0.5);
+        ink *= 1.0 - smoothstep(0.3, 0.72, edgeDist) * 0.55;
         ink = clamp(ink, 0.0, 1.0);
 
         // pick glyph by ink density
@@ -276,12 +289,32 @@ const Renderer = {
 
         // faint ambient grid glyphs on empty floor
         float floorGlyph = step(0.93, hash(cell + floor(time * 0.2))) * 0.05;
-        float inkVis = smoothstep(0.045, 0.13, ink);
+        float inkVis = smoothstep(0.07, 0.16, ink);
 
         vec3 col = mix(bgColor, gCol, glyph * max(inkVis, floorGlyph));
 
+        // --- Crisp entity composite with glyph-hatched shadows ---
+        // Bright parts of a model stay clean 3D; its shadow bands are drawn
+        // with ASCII glyphs so the shading language matches the background.
+        if (entityMix > 0.5) {
+          vec4 ent = texture2D(tEntity, uv);
+          if (ent.a > 0.02) {
+            vec3 ec = ent.rgb;
+            float eL = lum(ec);
+            float shadowAmt = smoothstep(0.5, 0.26, eL);
+            // hatch glyph density follows shadow depth
+            float hIdx = floor(mix(9.0, glyphCount - 5.0, shadowAmt));
+            float hG = texture2D(tGlyph, vec2((hIdx + inCell.x) / glyphCount, inCell.y)).a;
+            // shadow area: base lifts toward paper, ink glyphs carry the dark tone
+            vec3 lifted = mix(ec, bgColor, 0.5);
+            vec3 hatched = mix(lifted, ec * 0.6, hG);
+            vec3 entCol = mix(ec, hatched, shadowAmt);
+            col = mix(col, entCol, ent.a);
+          }
+        }
+
         // Glitch: corrupted rows flash accent-colored noise glyphs.
-        // Touches glyphs only — background stays clean (no full-screen tint).
+        // Applies over entities too — holograms break up with the signal.
         if (glitch > 0.001) {
           float gate = step(0.9, hash(vec2(cell.y, floor(time * 20.0))));
           float noiseG = step(0.93, hash(cell + floor(time * 30.0))) * gate;
@@ -349,6 +382,7 @@ const Renderer = {
     const pr = this.renderer.getPixelRatio();
     if (this._sceneTarget) {
       this._sceneTarget.setSize(this.width * pr, this.height * pr);
+      if (this._entityTarget) this._entityTarget.setSize(this.width * pr, this.height * pr);
       this._asciiUniforms.resolution.value.set(this.width * pr, this.height * pr);
     }
   },
@@ -359,6 +393,16 @@ const Renderer = {
 
   removeFromScene(mesh) {
     if (mesh.parent) mesh.parent.remove(mesh);
+  },
+
+  // Materialize/dissolve: background group renders through the ASCII shader,
+  // foreground renders crisp. Moving a mesh between them switches its look.
+  moveToBackground(mesh) {
+    if (mesh && mesh.parent !== this.arenaGroup) this.arenaGroup.add(mesh);
+  },
+
+  moveToForeground(mesh) {
+    if (mesh && mesh.parent !== this.entitiesGroup) this.entitiesGroup.add(mesh);
   },
 
   render(dt) {
@@ -377,32 +421,36 @@ const Renderer = {
     this._asciiUniforms.mixRaw.value = 0;
 
     const hybrid = this.asciiMode === 1;
+    this._asciiUniforms.entityMix.value = hybrid ? 1 : 0;
 
-    // Pass 1: background (arena only in hybrid) → ASCII shader
-    if (hybrid) {
-      this.entitiesGroup.visible = false;
-      this.particlesGroup.visible = false;
-    }
+    // Pass 1: background → scene target.
+    // In hybrid mode, particles/shockwaves render HERE too: bursts and trails
+    // become ASCII character sprays — memories decompiling into text.
+    if (hybrid) this.entitiesGroup.visible = false;
     this._setLightLevel(false);
     this.renderer.setRenderTarget(this._sceneTarget);
     this.renderer.render(this.scene, this.camera);
-    this.renderer.setRenderTarget(null);
-    this.renderer.render(this._asciiScene, this._asciiCamera);
 
-    // Pass 2 (hybrid): crisp low-poly entities on top of the ASCII background
+    // Pass 2 (hybrid): crisp entities → entity target (transparent clear)
     if (hybrid) {
       this.entitiesGroup.visible = true;
-      this.particlesGroup.visible = true;
       this.arenaGroup.visible = false;
+      this.particlesGroup.visible = false;
       const oldBg = this.scene.background;
       this.scene.background = null;
       this._setLightLevel(true);
-      this.renderer.autoClear = false;
-      this.renderer.clearDepth();
+      this.renderer.setRenderTarget(this._entityTarget);
+      this.renderer.setClearColor(0x000000, 0);
+      this.renderer.clear();
       this.renderer.render(this.scene, this.camera);
-      this.renderer.autoClear = true;
+      this.renderer.setClearColor(0xe7eefb, 1);
       this.scene.background = oldBg;
       this.arenaGroup.visible = true;
+      this.particlesGroup.visible = true;
     }
+
+    // Final composite: ASCII background + hatched holographic entities
+    this.renderer.setRenderTarget(null);
+    this.renderer.render(this._asciiScene, this._asciiCamera);
   },
 };

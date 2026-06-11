@@ -169,6 +169,7 @@ const Models = {
     this.addBlobShadow(group, 16, 0.2);
 
     group.userData.bodyMat = suit;
+    group.userData.glowMat = accentGlow;   // visor / chest core / boot stripes
     group.userData.locator = locator;
     group.userData.inner = inner;
     group.userData.torso = torso;
@@ -199,15 +200,42 @@ const Models = {
       grip.position.x = -2;
       g.add(grip);
     } else if (type === 'sniper') {
-      const barrel = new THREE.Mesh(new THREE.BoxGeometry(30, 2.2, 2.2), this.mat('#30343c'));
-      barrel.position.x = 12;
+      // Unmistakable rifle silhouette in side view:
+      // long thin barrel + muzzle, receiver, top scope w/ lens, magazine, angled stock
+      const gun = this.mat('#2a3340');
+      const dark = this.mat('#13202c');
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 26, 6), gun);
+      barrel.rotation.z = Math.PI / 2;
+      barrel.position.set(16, 1, 0);
       g.add(barrel);
-      const scope = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 6, 6), this.mat('#a050e0'));
-      scope.rotation.x = Math.PI / 2;
-      scope.position.set(8, 2.6, 0);
+      const muzzle = new THREE.Mesh(new THREE.BoxGeometry(3.5, 2.4, 2.4), gun);
+      muzzle.position.set(29, 1, 0);
+      g.add(muzzle);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(13, 3.5, 2.6), gun);
+      body.position.set(0, 0.5, 0);
+      g.add(body);
+      const scope = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 9, 6), dark);
+      scope.rotation.z = Math.PI / 2;
+      scope.position.set(3, 4.4, 0);
       g.add(scope);
-      const stock = new THREE.Mesh(new THREE.BoxGeometry(8, 4, 2), this.mat('#13202c'));
-      stock.position.x = -5;
+      const lens = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.2, 1.2, 0.6, 6),
+        new THREE.MeshBasicMaterial({ color: 0x7fd0ff })
+      );
+      lens.rotation.z = Math.PI / 2;
+      lens.position.set(7.8, 4.4, 0);
+      g.add(lens);
+      const mag = new THREE.Mesh(new THREE.BoxGeometry(3, 5, 2.2), dark);
+      mag.position.set(1, -3.5, 0);
+      mag.rotation.z = 0.15;
+      g.add(mag);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(2.2, 4, 2), dark);
+      grip.position.set(-4, -3, 0);
+      grip.rotation.z = 0.35;
+      g.add(grip);
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(8, 3, 2.2), dark);
+      stock.position.set(-9.5, -0.8, 0);
+      stock.rotation.z = -0.18;
       g.add(stock);
     } else if (type === 'darts') {
       for (let i = 0; i < 3; i++) {
