@@ -30,7 +30,8 @@ const Models = {
   // ============================================================
   createPlayer() {
     const group = new THREE.Group();
-    const mat = Renderer.createToonMaterial('#37d6e0');
+    // Deep saturated teal — bright cyan washes out through the ASCII filter
+    const mat = Renderer.createToonMaterial('#0e7c8a');
     const darkMat = Renderer.createToonMaterial('#0b141a');
     const accentMat = Renderer.createToonMaterial('#1b7ed6');
 
@@ -100,7 +101,20 @@ const Models = {
     armR.add(handMount);
 
     this.addEdges(inner, '#0b141a', 0.5);
+    inner.scale.setScalar(1.5);
     group.add(inner);
+
+    // Locator ring on the ground — always tells you where YOU are
+    const locator = new THREE.Mesh(
+      new THREE.RingGeometry(17, 27, 28),
+      new THREE.MeshBasicMaterial({
+        color: 0x1b7ed6, side: THREE.DoubleSide, transparent: true, opacity: 0.85,
+      })
+    );
+    locator.rotation.x = -Math.PI / 2;
+    locator.position.y = 1.2;
+    group.add(locator);
+    group.userData.locator = locator;
 
     group.userData.bodyMat = mat;
     group.userData.inner = inner;

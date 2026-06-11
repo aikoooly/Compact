@@ -359,9 +359,10 @@ const Camera = {
   apply() {
     const shake = Effects.getShakeOffset();
     const cam = Renderer.camera;
+    // ~48° 3/4 view — shows character silhouettes, not just their heads
     cam.position.x = this.x + shake.x;
-    cam.position.y = 600;
-    cam.position.z = this.y + 400 + shake.y;
+    cam.position.y = 540;
+    cam.position.z = this.y + 480 + shake.y;
     cam.lookAt(this.x + shake.x, 0, this.y + shake.y);
     const z = this.baseZoom + this.zoomPunch;
     if (Math.abs(cam.zoom - z) > 0.0005) {

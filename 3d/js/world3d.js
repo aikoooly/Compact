@@ -53,7 +53,7 @@ class Arena {
       Math.max(this.width, this.height) / this.gridSize,
       0x1b7ed6, 0x1b7ed6
     );
-    gridHelper.material.opacity = 0.3;
+    gridHelper.material.opacity = 0.55;
     gridHelper.material.transparent = true;
     gridHelper.position.y = 0;
     this.group.add(gridHelper);

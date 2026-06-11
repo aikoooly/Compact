@@ -242,6 +242,10 @@ const Game = {
     this.state = 'playing'; this.deathTimer = 0;
     Audio.setMusicIntensity(1);
 
+    // Spawn beacon — make it obvious where YOU are
+    Shockwaves.spawn(0, 0, { radius: 120, color: Theme.accent, life: 0.9, opacity: 0.9 });
+    DamageNumbers.spawn(0, 0, 'YOU', Theme.accent, { big: true, height: 70, rise: 5, life: 2.2 });
+
     // Show HUD
     document.getElementById('hud').classList.remove('hidden');
   },
