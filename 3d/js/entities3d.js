@@ -856,7 +856,7 @@ class Player {
     this.weapon = null;
     this.compactLevel = 0;
     this.afterimages = []; this.dead = false;
-    this.bodyColor = '#37d6e0';
+    this.bodyColor = '#11606e';
     this.stunned = false; this.stunnedTimer = 0;
     this.walkPhase = 0; this._moveSpeed = 0;
     this._weaponProp = null; this._weaponPropType = undefined;
@@ -910,7 +910,7 @@ class Player {
     if (this.invincible || this.dead) return;
     this.hp -= amount; this.invincible = true; this.invTimer = 0.5; this.hitFlashTimer = 0.15;
     Audio.playerHit(); Effects.shake(8, 0.2); Effects.flash(Theme.danger, 0.15);
-    Effects.glitch(0.9); Effects.hitStop(0.09); Camera.punchZoom(0.07);
+    Effects.glitch(0.55); Effects.hitStop(0.09); Camera.punchZoom(0.07);
     DamageNumbers.spawn(this.x, this.y, `-${Math.round(amount)}`, '#d64545', { big: true, height: 48 });
     Particles.burst(this.x, this.y, 12, '#f44', 200);
     if (this.hp <= 0) {

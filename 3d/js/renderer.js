@@ -23,7 +23,7 @@ const Renderer = {
   height: 720,
 
   // --- ASCII pipeline state ---
-  asciiMode: 1,          // 0 = raw 3D, 1 = ASCII fine, 2 = ASCII coarse
+  asciiMode: 1,          // 0 = raw 3D, 1 = hybrid (ASCII bg + 3D entities), 2 = full ASCII
   _sceneTarget: null,
   _asciiScene: null,
   _asciiCamera: null,
@@ -77,9 +77,15 @@ const Renderer = {
   },
 
   _createGradientMap() {
-    // 4-step toon gradient — hard bands read well through the ASCII filter
-    const colors = new Uint8Array([60, 140, 210, 255]);
-    this.gradientMap = new THREE.DataTexture(colors, colors.length, 1, THREE.RedFormat);
+    // 4-step toon gradient — hard bands read well through the ASCII filter.
+    // RGBA (not RedFormat): this three.js build samples the gradient's RGB,
+    // so a red-only texture would tint all direct light red.
+    const steps = [60, 140, 210, 255];
+    const colors = new Uint8Array(steps.length * 4);
+    steps.forEach((v, i) => {
+      colors[i * 4] = v; colors[i * 4 + 1] = v; colors[i * 4 + 2] = v; colors[i * 4 + 3] = 255;
+    });
+    this.gradientMap = new THREE.DataTexture(colors, steps.length, 1, THREE.RGBAFormat);
     this.gradientMap.minFilter = THREE.NearestFilter;
     this.gradientMap.magFilter = THREE.NearestFilter;
     this.gradientMap.needsUpdate = true;
@@ -89,9 +95,11 @@ const Renderer = {
     // Restrained light levels — overexposure flattens the ASCII ink mapping
     const ambient = new THREE.AmbientLight(0xffffff, 0.3);
     this.scene.add(ambient);
+    this._ambient = ambient;
 
     const hemi = new THREE.HemisphereLight(0xdce8f8, 0x8899aa, 0.15);
     this.scene.add(hemi);
+    this._hemi = hemi;
 
     const dir = new THREE.DirectionalLight(0xffffff, 0.52);
     dir.position.set(300, 500, 200);
@@ -275,9 +283,12 @@ const Renderer = {
         // Glitch: corrupted rows flash accent-colored noise glyphs.
         // Touches glyphs only — background stays clean (no full-screen tint).
         if (glitch > 0.001) {
-          float gate = step(0.82, hash(vec2(cell.y, floor(time * 20.0))));
-          float noiseG = step(0.88, hash(cell + floor(time * 30.0))) * gate;
-          float corrupt = clamp(glyph * gate * glitch * 0.7 + noiseG * glitch * 0.6, 0.0, 1.0);
+          float gate = step(0.9, hash(vec2(cell.y, floor(time * 20.0))));
+          float noiseG = step(0.93, hash(cell + floor(time * 30.0))) * gate;
+          // noise cells use a dense glyph shape — never solid rectangles
+          float gIdx2 = glyphCount - 4.0;
+          float glyph2 = texture2D(tGlyph, vec2((gIdx2 + inCell.x) / glyphCount, inCell.y)).a;
+          float corrupt = clamp((glyph * gate * 0.7 + glyph2 * noiseG * 0.8) * glitch, 0.0, 1.0);
           col = mix(col, accentColor, corrupt);
         }
 
@@ -308,13 +319,20 @@ const Renderer = {
 
   cycleAsciiMode() {
     this.asciiMode = (this.asciiMode + 1) % 3;
-    const pr = this.renderer.getPixelRatio();
-    if (this.asciiMode === 2) {
-      this._asciiUniforms.cellSize.value.set(11 * pr, 17 * pr);
+    return ['RAW 3D', 'HYBRID', 'FULL ASCII'][this.asciiMode];
+  },
+
+  // Brighter lights for the crisp entity pass, dimmer for the ASCII bg pass
+  _setLightLevel(entityPass) {
+    if (entityPass) {
+      this._ambient.intensity = 0.42;
+      this._hemi.intensity = 0.2;
+      this._dirLight.intensity = 0.62;
     } else {
-      this._asciiUniforms.cellSize.value.set(7 * pr, 11 * pr);
+      this._ambient.intensity = 0.3;
+      this._hemi.intensity = 0.15;
+      this._dirLight.intensity = 0.52;
     }
-    return ['RAW 3D', 'ASCII FINE', 'ASCII COARSE'][this.asciiMode];
   },
 
   _onResize() {
@@ -348,17 +366,43 @@ const Renderer = {
     this.glitch = Math.max(0, this.glitch - (dt || 0.016) * 2.2);
 
     if (this.asciiMode === 0 || !this._asciiQuad) {
+      this._setLightLevel(true);
       this.renderer.setRenderTarget(null);
       this.renderer.render(this.scene, this.camera);
       return;
     }
+
     this._asciiUniforms.time.value = this.time;
     this._asciiUniforms.glitch.value = this.glitch;
     this._asciiUniforms.mixRaw.value = 0;
 
+    const hybrid = this.asciiMode === 1;
+
+    // Pass 1: background (arena only in hybrid) → ASCII shader
+    if (hybrid) {
+      this.entitiesGroup.visible = false;
+      this.particlesGroup.visible = false;
+    }
+    this._setLightLevel(false);
     this.renderer.setRenderTarget(this._sceneTarget);
     this.renderer.render(this.scene, this.camera);
     this.renderer.setRenderTarget(null);
     this.renderer.render(this._asciiScene, this._asciiCamera);
+
+    // Pass 2 (hybrid): crisp low-poly entities on top of the ASCII background
+    if (hybrid) {
+      this.entitiesGroup.visible = true;
+      this.particlesGroup.visible = true;
+      this.arenaGroup.visible = false;
+      const oldBg = this.scene.background;
+      this.scene.background = null;
+      this._setLightLevel(true);
+      this.renderer.autoClear = false;
+      this.renderer.clearDepth();
+      this.renderer.render(this.scene, this.camera);
+      this.renderer.autoClear = true;
+      this.scene.background = oldBg;
+      this.arenaGroup.visible = true;
+    }
   },
 };
