@@ -25,6 +25,7 @@ const Game = {
     Input.init(Renderer.renderer.domElement);
     Audio.init();
     Particles.init();
+    DamageNumbers.init();
 
     // Create crosshair (always visible during gameplay)
     this.crosshair = Models.createCrosshair();
@@ -47,17 +48,18 @@ const Game = {
         console.error('Game loop error:', e);
       }
     }
-    // rAF-based loop with setTimeout fallback
+    // rAF-driven loop with a watchdog fallback: the interval only ticks when
+    // rAF has stalled (hidden/throttled tab) — never double-drives the loop.
     function scheduleNext() {
       requestAnimationFrame(function(ts) {
         tick(ts);
         scheduleNext();
       });
     }
-    // Also keep a setTimeout heartbeat to ensure loop runs even when rAF is throttled
+    scheduleNext();
     setInterval(function() {
-      tick(performance.now());
-    }, 16);
+      if (performance.now() - self.lastTime > 100) tick(performance.now());
+    }, 50);
   },
 
   _setupTitle() {
@@ -94,8 +96,15 @@ const Game = {
 
     const controls = document.createElement('div');
     controls.className = 'controls';
-    controls.textContent = 'WASD=move  MOUSE=aim  RCLICK=dash';
+    controls.textContent = 'WASD=move  MOUSE=aim  RCLICK=dash  V=render  M=sound';
     content.appendChild(controls);
+
+    const classicLink = document.createElement('a');
+    classicLink.className = 'classic-link';
+    classicLink.href = location.pathname.includes('/3d/') ? '../classic.html' : 'classic.html';
+    classicLink.textContent = '[ classic 2D edition ]';
+    classicLink.addEventListener('click', (e) => e.stopPropagation());
+    content.appendChild(classicLink);
 
     overlay.appendChild(content);
 
@@ -110,6 +119,16 @@ const Game = {
     this.lastTime = timestamp; dt = Math.min(dt, 0.05);
     const gameDt = dt * Effects.slowMo;
     Input.update();
+
+    // Global hotkeys: V = render mode, M = mute
+    if (Input.justPressed('KeyV')) {
+      const mode = Renderer.cycleAsciiMode();
+      this._showToast(`RENDER: ${mode}`);
+    }
+    if (Input.justPressed('KeyM')) {
+      const muted = Audio.toggleMute();
+      this._showToast(muted ? 'SOUND: OFF' : 'SOUND: ON');
+    }
     switch (this.state) {
       case 'title': this.updateTitle(dt); break;
       case 'cutscene': case 'ending': this.updateCutscene(dt); break;
@@ -127,6 +146,8 @@ const Game = {
       if (this.player) this.player.updateMesh();
       if (this.waveManager) this.waveManager.updateMeshes();
       Particles.update(gameDt);
+      Shockwaves.update(gameDt);
+      DamageNumbers.update(dt);
       Camera.apply();
 
       // Update crosshair position at mouse world coords
@@ -142,9 +163,23 @@ const Game = {
       // Hide crosshair when not in gameplay
       if (this.crosshair) this.crosshair.visible = false;
     }
-    Renderer.render();
+    Renderer.render(dt);
 
     Input.postUpdate();
+  },
+
+  // Small transient toast (render mode / mute feedback)
+  _showToast(text) {
+    let el = document.getElementById('toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'toast';
+      document.getElementById('game-container').appendChild(el);
+    }
+    el.textContent = `[ ${text} ]`;
+    el.classList.add('show');
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => el.classList.remove('show'), 1200);
   },
 
   // ---- Title ----
@@ -152,7 +187,7 @@ const Game = {
     this.titleTime += dt;
     if (this._titleClicked || Input.justPressed('Enter') || Input.justPressed('Space') || Input.mouse.clicked) {
       this._titleClicked = false;
-      Audio.resume(); Audio.menuSelect();
+      Audio.resume(); Audio.menuSelect(); Audio.startMusic();
       this.compactLevel = 0; this.totalDeaths = 0;
       this.fusedWeapon = false; this.playerChoseKatana = false;
       document.getElementById('overlay-title').classList.add('hidden');
@@ -205,6 +240,7 @@ const Game = {
     if (level.memoryCards) this.waveManager.addMemoryCards(level.memoryCards, this.arena);
     Camera.x = 0; Camera.y = 0; Particles.clear();
     this.state = 'playing'; this.deathTimer = 0;
+    Audio.setMusicIntensity(1);
 
     // Show HUD
     document.getElementById('hud').classList.remove('hidden');
@@ -342,6 +378,8 @@ const Game = {
     this.meleeHits.forEach(h => h.destroy());
     this.meleeHits = [];
     Particles.clear();
+    Shockwaves.clear();
+    DamageNumbers.clear();
   },
 
   // ---- Death Screen ----

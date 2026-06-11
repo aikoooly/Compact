@@ -28,30 +28,63 @@ class Arena {
   _buildMesh() {
     this.group = new THREE.Group();
 
-    // Extended floor — much larger than arena so it feels borderless
+    // Extended outer floor — pale, reads as "outside the memory"
     const extend = 600;
     const floorW = this.width + extend * 2;
     const floorH = this.height + extend * 2;
-    const floorGeo = new THREE.PlaneGeometry(floorW, floorH);
-    const floorMat = new THREE.MeshLambertMaterial({
-      color: new THREE.Color(this.floorColor),
-    });
-    const floor = new THREE.Mesh(floorGeo, floorMat);
+    const outerMat = new THREE.MeshLambertMaterial({ color: new THREE.Color('#e9effb') });
+    const outer = new THREE.Mesh(new THREE.PlaneGeometry(floorW, floorH), outerMat);
+    outer.rotation.x = -Math.PI / 2;
+    outer.position.y = -1;
+    outer.receiveShadow = true;
+    this.group.add(outer);
+
+    // Arena floor — slightly deeper blue so the playfield reads through the ASCII filter
+    const floorMat = new THREE.MeshLambertMaterial({ color: new THREE.Color('#c9dcf4') });
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(this.width, this.height), floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -0.5;
     floor.receiveShadow = true;
     this.group.add(floor);
 
-    // Grid — only inside the arena area (subtle)
+    // Grid — visible accent lines inside the arena
     const gridHelper = new THREE.GridHelper(
       Math.max(this.width, this.height),
       Math.max(this.width, this.height) / this.gridSize,
       0x1b7ed6, 0x1b7ed6
     );
-    gridHelper.material.opacity = 0.04;
+    gridHelper.material.opacity = 0.3;
     gridHelper.material.transparent = true;
     gridHelper.position.y = 0;
     this.group.add(gridHelper);
+
+    // Glowing border frame — thin accent bars marking the walls
+    const borderMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(this.borderColor), transparent: true, opacity: 0.85,
+    });
+    const bt = 3, bh = 6; // bar thickness / height
+    const mkBar = (w, d, x, z) => {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(w, bh, d), borderMat);
+      bar.position.set(x, bh / 2, z);
+      this.group.add(bar);
+    };
+    mkBar(this.width + bt * 2, bt, 0, this.top - bt / 2);
+    mkBar(this.width + bt * 2, bt, 0, this.bottom + bt / 2);
+    mkBar(bt, this.height, this.left - bt / 2, 0);
+    mkBar(bt, this.height, this.right + bt / 2, 0);
+
+    // Corner pillars — small glowing columns
+    const pillarMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(this.borderColor), transparent: true, opacity: 0.9,
+    });
+    for (const [cx, cz] of [
+      [this.left, this.top], [this.right, this.top],
+      [this.left, this.bottom], [this.right, this.bottom],
+    ]) {
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(6, 26, 6), pillarMat);
+      pillar.position.set(cx, 13, cz);
+      this.group.add(pillar);
+    }
 
     // NO solid walls — invisible collision only (handled by containPlayer)
 
@@ -417,11 +450,12 @@ const Collision = {
         if (hit.hitsEnemy(e)) {
           e.takeDamage(hit.damage);
           hit.hitEnemies.add(e);
+          // Knockback as decaying impulse — slides instead of teleporting
           const dir = Vec.norm(Vec.sub(e, { x: hit.x, y: hit.y }));
-          e.x += dir.x * hit.knockback * 0.3;
-          e.y += dir.y * hit.knockback * 0.3;
+          e.kbVx += dir.x * hit.knockback * 2.8;
+          e.kbVy += dir.y * hit.knockback * 2.8;
           Particles.emit(e.x, e.y, 8, hit.color, { speed: 200, life: 0.2, size: 3 });
-          Effects.slowMotion(0.15, 0.03);
+          Effects.hitStop(0.045);
         }
       }
     }

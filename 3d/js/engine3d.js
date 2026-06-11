@@ -224,15 +224,35 @@ const Audio = {
     source.start();
   },
 
+  // Pitch-swept tone — the backbone of "punchy" procedural SFX
+  _sweep(f0, f1, duration, type = 'sine', volume = 0.3) {
+    if (!this.ctx || this.muted) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(f0, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(1, f1), this.ctx.currentTime + duration);
+    gain.gain.setValueAtTime(volume, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+    osc.connect(gain); gain.connect(this.masterGain);
+    osc.start(); osc.stop(this.ctx.currentTime + duration);
+  },
+
+  // Bass kick: sine drop 150→40Hz — gives impacts a body
+  _kick(volume = 0.4, duration = 0.16) { this._sweep(150, 40, duration, 'sine', volume); },
+
   shoot() { this._playTone(800, 0.1, 'square', 0.15); this._playNoise(0.05, 0.1); },
-  sniper() { this._playTone(200, 0.3, 'sawtooth', 0.2); this._playTone(600, 0.2, 'sine', 0.15); this._playNoise(0.15, 0.2); },
-  dart() { this._playTone(1200, 0.05, 'sine', 0.1); },
-  grapple() { this._playTone(150, 0.4, 'sawtooth', 0.2); this._playTone(300, 0.3, 'sine', 0.15); },
-  grappleHit() { this._playTone(100, 0.2, 'square', 0.2); },
-  hit() { this._playTone(200, 0.1, 'square', 0.2); this._playNoise(0.08, 0.15); },
-  enemyDie() { this._playTone(150, 0.3, 'sawtooth', 0.15); this._playTone(80, 0.4, 'square', 0.1); this._playNoise(0.2, 0.15); },
-  playerHit() { this._playTone(100, 0.2, 'square', 0.3); this._playNoise(0.15, 0.2); },
-  dash() { this._playTone(400, 0.15, 'sine', 0.15); this._playTone(600, 0.1, 'sine', 0.1); },
+  sniper() { this._kick(0.35, 0.2); this._sweep(900, 120, 0.25, 'sawtooth', 0.18); this._playNoise(0.18, 0.22); },
+  dart() { this._sweep(1600, 900, 0.07, 'sine', 0.12); },
+  grapple() { this._sweep(120, 320, 0.3, 'sawtooth', 0.18); },
+  grappleHit() { this._kick(0.3, 0.12); this._playTone(100, 0.2, 'square', 0.2); },
+  hit() { this._playTone(200, 0.08, 'square', 0.18); this._playNoise(0.06, 0.14); },
+  punchLight() { this._sweep(300, 120, 0.08, 'square', 0.2); this._playNoise(0.04, 0.12); },
+  punchHeavy() { this._kick(0.5, 0.22); this._sweep(420, 60, 0.18, 'square', 0.28); this._playNoise(0.14, 0.25); },
+  katana() { this._sweep(2400, 300, 0.12, 'sawtooth', 0.1); this._playNoise(0.1, 0.18); },
+  enemyDie() { this._kick(0.25, 0.14); this._sweep(400, 60, 0.3, 'sawtooth', 0.14); this._playNoise(0.18, 0.14); },
+  playerHit() { this._kick(0.45, 0.2); this._sweep(220, 50, 0.25, 'square', 0.25); this._playNoise(0.15, 0.2); },
+  dash() { this._sweep(300, 900, 0.14, 'sine', 0.14); },
   waveComplete() {
     this._playTone(523, 0.15, 'sine', 0.2);
     setTimeout(() => this._playTone(659, 0.15, 'sine', 0.2), 100);
@@ -245,6 +265,63 @@ const Audio = {
   },
   menuSelect() { this._playTone(600, 0.08, 'sine', 0.15); },
   charReveal() { this._playTone(800 + Math.random() * 400, 0.03, 'sine', 0.05); },
+
+  // --- Ambient cyber drone (procedural, loops forever, M to mute) ---
+  _music: null,
+  startMusic() {
+    if (!this.ctx || this._music) return;
+    const t = this.ctx.currentTime;
+    const musicGain = this.ctx.createGain();
+    musicGain.gain.value = 0.05;
+    musicGain.connect(this.masterGain);
+
+    // Two detuned saws through a slowly-sweeping lowpass = soft pad
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 320;
+    filter.Q.value = 2;
+    filter.connect(musicGain);
+
+    const oscs = [];
+    [[110, -7], [110, 7], [220, 0]].forEach(([f, det]) => {
+      const o = this.ctx.createOscillator();
+      o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det;
+      o.connect(filter); o.start();
+      oscs.push(o);
+    });
+
+    // LFO sweeps the filter — slow breathing
+    const lfo = this.ctx.createOscillator();
+    const lfoGain = this.ctx.createGain();
+    lfo.frequency.value = 0.06;
+    lfoGain.gain.value = 180;
+    lfo.connect(lfoGain); lfoGain.connect(filter.frequency);
+    lfo.start();
+
+    // Sparse high "data blip" pattern
+    const blipTimer = setInterval(() => {
+      if (this.muted || !this._music) return;
+      if (Math.random() < 0.4) {
+        const f = [523, 659, 784, 880, 1047][Math.floor(Math.random() * 5)];
+        this._playTone(f, 0.4, 'sine', 0.02);
+      }
+    }, 1800);
+
+    this._music = { oscs, lfo, musicGain, blipTimer };
+  },
+
+  setMusicIntensity(level) {
+    // 0 = calm (menus), 1 = combat — raises pad volume slightly
+    if (!this._music) return;
+    const target = level > 0.5 ? 0.07 : 0.04;
+    this._music.musicGain.gain.linearRampToValueAtTime(target, this.ctx.currentTime + 1.5);
+  },
+
+  toggleMute() {
+    this.muted = !this.muted;
+    if (this.masterGain) this.masterGain.gain.value = this.muted ? 0 : 0.3;
+    return this.muted;
+  },
 };
 
 // --- Camera3D ---
@@ -252,22 +329,31 @@ const Camera = {
   x: 0, y: 0,
   targetX: 0, targetY: 0,
   canvasW: 1280, canvasH: 720,
-  smoothing: 0.08,
-  leadAmount: 60,
+  smoothing: 0.1,
+  leadAmount: 70,
+  zoomPunch: 0,      // impact zoom, decays fast
+  baseZoom: 1.55,    // closer framing — characters read larger through the ASCII filter
 
   follow(target, aimX, aimY) {
     const dx = aimX - target.x;
     const dy = aimY - target.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const leadX = dist > 0 ? (dx / dist) * this.leadAmount : 0;
-    const leadY = dist > 0 ? (dy / dist) * this.leadAmount : 0;
+    // Lead scales with aim distance (capped) — feels more deliberate
+    const lead = Math.min(this.leadAmount, dist * 0.25);
+    const leadX = dist > 0 ? (dx / dist) * lead : 0;
+    const leadY = dist > 0 ? (dy / dist) * lead : 0;
     this.targetX = target.x + leadX;
     this.targetY = target.y + leadY;
+  },
+
+  punchZoom(amount = 0.06) {
+    this.zoomPunch = Math.max(this.zoomPunch, amount);
   },
 
   update(dt) {
     this.x = lerp(this.x, this.targetX, this.smoothing);
     this.y = lerp(this.y, this.targetY, this.smoothing);
+    this.zoomPunch = Math.max(0, this.zoomPunch - dt * 0.35);
   },
 
   apply() {
@@ -277,6 +363,11 @@ const Camera = {
     cam.position.y = 600;
     cam.position.z = this.y + 400 + shake.y;
     cam.lookAt(this.x + shake.x, 0, this.y + shake.y);
+    const z = this.baseZoom + this.zoomPunch;
+    if (Math.abs(cam.zoom - z) > 0.0005) {
+      cam.zoom = z;
+      cam.updateProjectionMatrix();
+    }
   },
 };
 
@@ -291,7 +382,8 @@ const Effects = {
   flashColor: '#fff',
 
   shake(amount, duration = 0.2) {
-    this.shakeAmount = amount;
+    // trauma accumulates instead of overwriting — repeated hits feel heavier
+    this.shakeAmount = Math.max(this.shakeAmount * (this.shakeTimer > 0 ? 0.5 : 0), amount);
     this.shakeDuration = duration;
     this.shakeTimer = duration;
   },
@@ -299,6 +391,17 @@ const Effects = {
   slowMotion(factor, duration) {
     this.slowMo = factor;
     this.slowMoTimer = duration;
+  },
+
+  // Hard hit-stop: near-freeze for a few frames. The cheapest, strongest juice.
+  hitStop(duration = 0.07) {
+    this.slowMo = 0.02;
+    this.slowMoTimer = duration;
+  },
+
+  // Cyber glitch burst on the ASCII shader (player damage, boss death)
+  glitch(amount = 0.8) {
+    Renderer.glitch = Math.max(Renderer.glitch, amount);
   },
 
   flash(color = '#fff', alpha = 0.3) {
@@ -332,11 +435,67 @@ const Effects = {
   getShakeOffset() {
     if (this.shakeTimer <= 0) return { x: 0, y: 0 };
     const progress = this.shakeTimer / this.shakeDuration;
-    const intensity = this.shakeAmount * progress;
+    const intensity = this.shakeAmount * progress * progress; // quadratic falloff: sharp attack, fast settle
     return {
       x: (Math.random() - 0.5) * 2 * intensity,
       y: (Math.random() - 0.5) * 2 * intensity,
     };
+  },
+};
+
+// --- Floating damage numbers (HTML, projected from world space) ---
+// ASCII-style crisp text that lives above the canvas, so it stays
+// sharp even through the ASCII shader.
+const DamageNumbers = {
+  list: [],
+  container: null,
+  _vec: null,
+
+  init() {
+    this.container = document.getElementById('damage-numbers');
+    this._vec = new THREE.Vector3();
+  },
+
+  spawn(x, y, text, color = '#0b141a', opts = {}) {
+    if (!this.container) return;
+    if (this.list.length > 40) { const old = this.list.shift(); old.el.remove(); }
+    const el = document.createElement('div');
+    el.className = 'dmg-num' + (opts.big ? ' big' : '');
+    el.textContent = text;
+    el.style.color = color;
+    this.container.appendChild(el);
+    this.list.push({
+      el, x, y,
+      h: opts.height || 30,        // world height offset
+      vy: opts.rise || 55,         // world rise speed
+      vx: (Math.random() - 0.5) * 30,
+      life: opts.life || 0.8,
+      maxLife: opts.life || 0.8,
+    });
+  },
+
+  update(dt) {
+    if (!this.container) return;
+    const cam = Renderer.camera;
+    const w = Renderer.width, h = Renderer.height;
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const d = this.list[i];
+      d.life -= dt;
+      if (d.life <= 0) { d.el.remove(); this.list.splice(i, 1); continue; }
+      d.h += d.vy * dt;
+      d.x += d.vx * dt;
+      const t = d.life / d.maxLife;
+      this._vec.set(d.x, d.h, d.y).project(cam);
+      const sx = (this._vec.x * 0.5 + 0.5) * w;
+      const sy = (-this._vec.y * 0.5 + 0.5) * h;
+      d.el.style.transform = `translate(${sx}px, ${sy}px) translate(-50%, -100%) scale(${0.8 + t * 0.4})`;
+      d.el.style.opacity = Math.min(1, t * 2.5);
+    }
+  },
+
+  clear() {
+    for (const d of this.list) d.el.remove();
+    this.list = [];
   },
 };
 
@@ -360,16 +519,33 @@ const Particles = {
     this.geometry.setAttribute('color', new THREE.BufferAttribute(this.colors, 3));
     this.geometry.setAttribute('size', new THREE.BufferAttribute(this.sizes, 1));
 
-    const mat = new THREE.PointsMaterial({
-      size: 4,
-      vertexColors: true,
+    // Custom shader so the per-particle `size` attribute actually works
+    const mat = new THREE.ShaderMaterial({
       transparent: true,
-      opacity: 0.8,
-      sizeAttenuation: true,
       depthWrite: false,
+      vertexShader: `
+        attribute float size;
+        varying vec3 vColor;
+        void main() {
+          vColor = color;
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = size * 2.2;
+          gl_Position = projectionMatrix * mv;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        void main() {
+          vec2 d = gl_PointCoord - 0.5;
+          if (dot(d, d) > 0.25) discard;
+          gl_FragColor = vec4(vColor, 0.85);
+        }
+      `,
+      vertexColors: true,
     });
 
     this.points = new THREE.Points(this.geometry, mat);
+    this.points.frustumCulled = false;
     Renderer.particlesGroup.add(this.points);
   },
 
@@ -451,4 +627,57 @@ const Particles = {
 
   // Compat: draw is a no-op in 3D (particles render via Points)
   draw() {},
+};
+
+// --- Shockwave rings (expanding ground rings on heavy impacts) ---
+const Shockwaves = {
+  list: [],
+
+  spawn(x, y, opts = {}) {
+    const color = opts.color || Theme.accent;
+    const geo = new THREE.RingGeometry(0.8, 1.0, 40);
+    const mat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(color),
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: opts.opacity || 0.7,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x, 1.5, y);
+    Renderer.particlesGroup.add(mesh);
+    this.list.push({
+      mesh, mat,
+      life: opts.life || 0.4,
+      maxLife: opts.life || 0.4,
+      maxRadius: opts.radius || 80,
+      baseOpacity: opts.opacity || 0.7,
+    });
+  },
+
+  update(dt) {
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const s = this.list[i];
+      s.life -= dt;
+      if (s.life <= 0) {
+        Renderer.particlesGroup.remove(s.mesh);
+        s.mesh.geometry.dispose(); s.mat.dispose();
+        this.list.splice(i, 1);
+        continue;
+      }
+      const t = 1 - s.life / s.maxLife;
+      const r = easeOutCubic(t) * s.maxRadius;
+      s.mesh.scale.setScalar(Math.max(0.001, r));
+      s.mat.opacity = s.baseOpacity * (1 - t);
+    }
+  },
+
+  clear() {
+    for (const s of this.list) {
+      Renderer.particlesGroup.remove(s.mesh);
+      s.mesh.geometry.dispose(); s.mat.dispose();
+    }
+    this.list = [];
+  },
 };

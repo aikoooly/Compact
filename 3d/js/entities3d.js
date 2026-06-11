@@ -208,9 +208,17 @@ class BoxingGloves {
     }
 
     Effects.shake(shakeAmt, 0.15);
-    if (t >= 1.0) Effects.slowMotion(0.15, 0.07);
-    if (t >= 2.0) Effects.flash(Theme.accent, 0.1);
-    Audio.hit();
+    if (t >= 1.0) {
+      Effects.hitStop(0.06); Camera.punchZoom(0.05); Audio.punchHeavy();
+    } else {
+      Audio.punchLight();
+    }
+    if (t >= 2.0) {
+      Effects.flash(Theme.accent, 0.1);
+      Camera.punchZoom(0.09);
+      Shockwaves.spawn(player.x + Math.cos(angle) * 60, player.y + Math.sin(angle) * 60,
+        { radius: 140, color: '#fa0', life: 0.45 });
+    }
 
     // Particles along attack direction
     const particleCount = Math.floor(5 + dmgPct * 20);
@@ -714,12 +722,12 @@ class KatanaWeapon {
             // HIT! Blade passes through this enemy
             e.takeDamage(this.slashDamage);
             this._slashHitEnemies.add(e);
-            // Knockback away from blade
+            // Knockback impulse away from blade (smooth, not teleport)
             const dir = Vec.norm(Vec.sub(e, player));
-            e.x += dir.x * this.slashKnockback * 0.3;
-            e.y += dir.y * this.slashKnockback * 0.3;
+            e.kbVx += dir.x * this.slashKnockback * 2.5;
+            e.kbVy += dir.y * this.slashKnockback * 2.5;
             Particles.emit(e.x, e.y, 8, '#ccc', { speed: 200, life: 0.2, size: 3 });
-            Effects.slowMotion(0.15, 0.03);
+            Effects.hitStop(0.04);
           }
         }
       }
@@ -754,8 +762,12 @@ class KatanaWeapon {
 
       this.slashCooldown = cooldown;
       Effects.shake(shakeAmt, 0.1);
-      if (t >= 1.0) Effects.slowMotion(0.15, 0.06);
-      Audio.hit();
+      if (t >= 1.0) {
+        Effects.slowMotion(0.15, 0.06);
+        Camera.punchZoom(0.06);
+        Shockwaves.spawn(player.x, player.y, { radius: range, color: '#ccd6e0', life: 0.4, opacity: 0.5 });
+      }
+      Audio.katana();
       this.charging = false; this.chargeTime = 0;
     }
   }
@@ -844,8 +856,10 @@ class Player {
     this.weapon = null;
     this.compactLevel = 0;
     this.afterimages = []; this.dead = false;
-    this.bodyColor = '#4ff';
+    this.bodyColor = '#37d6e0';
     this.stunned = false; this.stunnedTimer = 0;
+    this.walkPhase = 0; this._moveSpeed = 0;
+    this._weaponProp = null; this._weaponPropType = undefined;
 
     // 3D mesh
     this.mesh = Models.createPlayer();
@@ -875,6 +889,9 @@ class Player {
       this.vx = move.x * this.speed; this.vy = move.y * this.speed;
     }
     this.x += this.vx * dt; this.y += this.vy * dt;
+    // Walk cycle phase driven by actual speed
+    this._moveSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+    this.walkPhase += dt * Math.min(this._moveSpeed, 420) * 0.045;
     if (Input.mouse.rightClicked && this.dashCdTimer <= 0 && !this.dashing) {
       this.dashing = true; this.invincible = true; this.dashTimer = this.dashDuration;
       this.dashCdTimer = this.dashCooldown;
@@ -893,8 +910,14 @@ class Player {
     if (this.invincible || this.dead) return;
     this.hp -= amount; this.invincible = true; this.invTimer = 0.5; this.hitFlashTimer = 0.15;
     Audio.playerHit(); Effects.shake(8, 0.2); Effects.flash(Theme.danger, 0.15);
+    Effects.glitch(0.9); Effects.hitStop(0.09); Camera.punchZoom(0.07);
+    DamageNumbers.spawn(this.x, this.y, `-${Math.round(amount)}`, '#d64545', { big: true, height: 48 });
     Particles.burst(this.x, this.y, 12, '#f44', 200);
-    if (this.hp <= 0) { this.hp = 0; this.dead = true; }
+    if (this.hp <= 0) {
+      this.hp = 0; this.dead = true;
+      Effects.glitch(1.0); Effects.shake(16, 0.5);
+      Shockwaves.spawn(this.x, this.y, { radius: 160, color: '#d64545', life: 0.8 });
+    }
   }
 
   updateMesh() {
@@ -929,6 +952,66 @@ class Player {
       } else {
         bodyMat.color.set(this.bodyColor);
       }
+    }
+
+    // --- Articulated animation: walk cycle, weapon poses, dash lean ---
+    const ud = this.mesh.userData;
+    if (ud.armL) {
+      const tNow = Date.now() / 1000;
+      const moving = this._moveSpeed > 10;
+      const w = this.weapon;
+      const phase = this.walkPhase || 0;
+      const idleSwing = Math.sin(tNow * 2) * 0.06;
+      const walkSwing = Math.sin(phase) * 0.6;
+
+      // Legs scissor while moving
+      ud.legL.rotation.z = moving ? walkSwing : 0;
+      ud.legR.rotation.z = moving ? -walkSwing : 0;
+
+      // Arms: weapon poses override walk swing (positive z = forward)
+      let armLZ = moving ? -walkSwing * 0.8 : idleSwing;
+      let armRZ = moving ? walkSwing * 0.8 : -idleSwing;
+
+      if (w instanceof BoxingGloves) {
+        if (w.charging) {
+          const ct = clamp(w.chargeTime / 2, 0, 1);
+          armRZ = -0.6 - ct * 0.8;        // wind back, deeper with charge
+          armLZ = 0.5;                     // guard up
+        } else if (w.punchCooldown > 0.05) {
+          armRZ = 1.5;                     // full extension
+        }
+      } else if (w instanceof KatanaWeapon) {
+        if (w.charging) armRZ = -1.0;      // raised behind
+        else if (w.slashing) armRZ = 1.4;  // swung through
+        else armRZ = 0.45;                 // ready stance
+      } else if (w instanceof SniperRifle) {
+        armRZ = 1.25; armLZ = 1.0;         // two-hand aim
+      } else if (w instanceof DartWeapon) {
+        if (w.throwCooldown > 0.05) armRZ = 1.45;
+      } else if (w instanceof ChainGun) {
+        if (w.chainState !== 'ready') armRZ = 1.2;
+        else armRZ = 0.6;
+      }
+
+      ud.armL.rotation.z = lerp(ud.armL.rotation.z, armLZ, 0.45);
+      ud.armR.rotation.z = lerp(ud.armR.rotation.z, armRZ, 0.45);
+
+      // Body lean into movement + dash stretch + bob
+      const lean = this.dashing ? 0.4 : moving ? 0.12 : 0;
+      ud.inner.rotation.z = lerp(ud.inner.rotation.z, -lean, 0.25);
+      const stretch = this.dashing ? 1.12 : 1;
+      ud.inner.scale.x = lerp(ud.inner.scale.x, stretch, 0.3);
+      ud.inner.scale.y = lerp(ud.inner.scale.y, this.dashing ? 0.92 : 1, 0.3);
+      ud.inner.position.y = moving ? Math.abs(Math.sin(phase)) * 1.6 : Math.sin(tNow * 2) * 0.8;
+    }
+
+    // Weapon prop in right hand (katana / rifle / darts / hook launcher)
+    const propType = this._weaponPropName();
+    if (propType !== this._weaponPropType && ud.handMount) {
+      if (this._weaponProp) ud.handMount.remove(this._weaponProp);
+      this._weaponProp = propType ? Models.createWeaponProp(propType) : null;
+      if (this._weaponProp) ud.handMount.add(this._weaponProp);
+      this._weaponPropType = propType;
     }
 
     // Weapon visuals
@@ -974,6 +1057,16 @@ class Player {
     }
   }
 
+  _weaponPropName() {
+    const w = this.weapon;
+    if (!w) return null;
+    if (w instanceof KatanaWeapon) return 'katana';
+    if (w instanceof SniperRifle) return 'sniper';
+    if (w instanceof DartWeapon) return 'darts';
+    if (w instanceof ChainGun) return 'chaingun';
+    return null; // boxing gloves are built into the model
+  }
+
   destroy() {
     if (this.mesh) Renderer.removeFromScene(this.mesh);
     this._afterimageMeshes.forEach(am => Renderer.removeFromScene(am.mesh));
@@ -1013,6 +1106,7 @@ class Enemy {
     this.revealed = false;
     this.origRadius = type.radius;
     this.ghostStepTimer = 0; this.ghostDir = { x: 0, y: 0 };
+    this.kbVx = 0; this.kbVy = 0; // knockback impulse (decays)
 
     // 3D mesh
     this.mesh = this._createMesh();
@@ -1090,6 +1184,10 @@ class Enemy {
     else if (b === 'boss_real') this._bossReal(dt, player, dist, enemyProjectiles);
 
     this.x += this.vx * dt; this.y += this.vy * dt;
+    // Knockback impulse — smooth slide with heavy damping
+    this.x += this.kbVx * dt; this.y += this.kbVy * dt;
+    const kbDamp = Math.pow(0.0005, dt);
+    this.kbVx *= kbDamp; this.kbVy *= kbDamp;
     if (arena) {
       this.x = clamp(this.x, arena.left + this.radius, arena.right - this.radius);
       this.y = clamp(this.y, arena.top + this.radius, arena.bottom - this.radius);
@@ -1358,12 +1456,26 @@ class Enemy {
     }
     if (this.type.behavior === 'boss_pillow' && !this.stunned) amount *= 0.3;
     this.hp -= amount; this.hitFlash = 0.1; Audio.hit();
+    DamageNumbers.spawn(this.x, this.y, `${Math.round(amount)}`,
+      amount >= 100 ? '#d69f1b' : '#1b7ed6',
+      { height: this.radius + 28, big: amount >= 100 });
     if (this.hp <= 0) this.die();
   }
 
   die() {
-    this.dying = true; this.dyingTimer = 0.3; this.vx = 0; this.vy = 0;
+    this.dying = true; this.dyingTimer = 0.3; this.dyingMax = 0.3; this.vx = 0; this.vy = 0;
     Audio.enemyDie(); Effects.slowMotion(0.3, 0.05);
+    Shockwaves.spawn(this.x, this.y, {
+      radius: this.isBoss ? 220 : this.radius * 4,
+      color: this.isBoss ? Theme.accent : this.color,
+      life: this.isBoss ? 0.7 : 0.35,
+    });
+    if (this.isBoss) {
+      this.dyingTimer = 0.6; this.dyingMax = 0.6;
+      Effects.hitStop(0.14); Effects.glitch(1.0);
+      Camera.punchZoom(0.12); Effects.shake(14, 0.4);
+      Effects.flash(Theme.accent, 0.18);
+    }
     if (this.type.behavior === 'bat' || this.type.behavior === 'boss_tiger') {
       const count = Math.floor(this.radius * 1.5);
       for (let i = 0; i < count; i++) {
@@ -1394,10 +1506,12 @@ class Enemy {
     // Position
     this.mesh.position.set(this.x, 0, this.y);
 
-    // Spawn animation
+    // Spawn animation — pop with overshoot (easeOutBack)
     if (this.spawnTimer > 0) {
       const t = 1 - this.spawnTimer / 0.4;
-      this.mesh.scale.setScalar(t);
+      const c1 = 1.70158, c3 = c1 + 1;
+      const s = 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+      this.mesh.scale.setScalar(Math.max(0.01, s));
       return;
     } else {
       // Breathing
@@ -1406,16 +1520,59 @@ class Enemy {
       this.mesh.scale.set(1, breath, 1);
     }
 
-    // Dying animation
+    // Dying animation — inflate, spin, sink, fade
     if (this.dying) {
-      const t = 1 - this.dyingTimer / 0.3;
+      const t = 1 - this.dyingTimer / (this.dyingMax || 0.3);
       this.mesh.scale.setScalar(1 + t * 0.5);
+      this.mesh.rotation.y += 0.18;
+      this.mesh.position.y = -t * 12;
       this.mesh.traverse(child => {
         if (child.material && child.material.transparent !== undefined) {
           child.material.transparent = true;
           child.material.opacity = 1 - t;
         }
       });
+    }
+
+    // --- Per-model part animation ---
+    if (!this.dying) {
+      const ud = this.mesh.userData;
+      const tNow = Date.now() / 1000;
+      // Spider legs scuttle (rate scales with movement speed)
+      if (ud.legs) {
+        const spd = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+        const rate = 6 + spd * 0.05;
+        for (const leg of ud.legs) {
+          leg.pivot.rotation.y = Math.sin(tNow * rate + leg.phase) * 0.28;
+          leg.pivot.rotation.x = Math.cos(tNow * rate + leg.phase) * 0.1;
+        }
+      }
+      // Bat wings flap
+      if (ud.wingL) {
+        const flap = Math.sin(tNow * 13 + this.phaseTimer) * 0.75;
+        ud.wingL.rotation.x = -flap;
+        ud.wingR.rotation.x = flap;
+        this.mesh.position.y = Math.sin(tNow * 5 + this.phaseTimer) * 3;
+      }
+      // Water blob vertex wobble
+      if (ud.wobbleMesh && ud.wobbleBase) {
+        const pos = ud.wobbleMesh.geometry.attributes.position;
+        const base = ud.wobbleBase;
+        for (let i = 0; i < pos.count; i++) {
+          const bx = base[i * 3], by = base[i * 3 + 1], bz = base[i * 3 + 2];
+          const n = 1 + Math.sin(tNow * 3 + bx * 0.5 + by * 0.7 + bz * 0.3) * 0.18;
+          pos.setXYZ(i, bx * n, by * n, bz * n);
+        }
+        pos.needsUpdate = true;
+      }
+      // Ghost hover + skirt sway
+      if (ud.skirt) {
+        ud.skirt.scale.x = 1 + Math.sin(tNow * 3.5 + this.phaseTimer) * 0.12;
+        ud.skirt.scale.z = 1 + Math.cos(tNow * 3.1 + this.phaseTimer) * 0.12;
+        this.mesh.position.y = 4 + Math.sin(tNow * 2 + this.phaseTimer) * 4;
+      }
+      // Retweet disc spin
+      if (ud.spinPart) ud.spinPart.rotation.y += 0.05;
     }
 
     // Hit flash
